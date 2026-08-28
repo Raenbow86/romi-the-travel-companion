@@ -70,7 +70,10 @@ const ICONS: Record<string, string> = {
   Power: "⚡",
 };
 
-function centerFor(area: string): Center {
+function centerFor(area: string, lat?: number, lng?: number, radius?: number): Center {
+  if (typeof lat === "number" && !Number.isNaN(lat) && typeof lng === "number" && !Number.isNaN(lng)) {
+    return { lat, lng, radius: radius && radius > 0 ? radius : 32000 };
+  }
   const q = area.toLowerCase();
   if (q.includes("lodgepole") || q.includes("taylor")) {
     return { lat: 38.7616, lng: -106.6623, radius: 18000 };
@@ -147,11 +150,12 @@ async function fromGoogle(
   area: string,
   needs: string[],
   exclude: string[],
+  origin?: { lat: number; lng: number; radius?: number },
 ): Promise<NearbyPlace[]> {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) return [];
 
-  const center = centerFor(area);
+  const center = centerFor(area, origin?.lat, origin?.lng, origin?.radius);
   const primary = needs[0] || "Food";
   const type = GOOGLE_TYPES[primary] || "point_of_interest";
   const keyword = [...needs, area].join(" ");
@@ -254,8 +258,9 @@ async function fromOsm(
   area: string,
   needs: string[],
   exclude: string[],
+  origin?: { lat: number; lng: number; radius?: number },
 ): Promise<NearbyPlace[]> {
-  const center = centerFor(area);
+  const center = centerFor(area, origin?.lat, origin?.lng, origin?.radius);
   const filters = tagsFor(needs)
     .map((tag) => `nwr${tag}(around:${center.radius},${center.lat},${center.lng});`)
     .join("\n");
@@ -428,10 +433,17 @@ export async function GET(request: NextRequest) {
     .toLowerCase()
     .split("|")
     .filter(Boolean);
+  const latNum = Number(request.nextUrl.searchParams.get("lat"));
+  const lngNum = Number(request.nextUrl.searchParams.get("lng"));
+  const radiusNum = Number(request.nextUrl.searchParams.get("radius"));
+  const origin =
+    !Number.isNaN(latNum) && !Number.isNaN(lngNum)
+      ? { lat: latNum, lng: lngNum, radius: Number.isNaN(radiusNum) ? 32000 : radiusNum }
+      : undefined;
 
   let googleError = "";
   try {
-    const google = await fromGoogle(area, needs, exclude);
+    const google = await fromGoogle(area, needs, exclude, origin);
     if (google.length > 0) {
       return NextResponse.json({ places: google, source: "google" });
     }
@@ -440,7 +452,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const osm = await fromOsm(area, needs, exclude);
+    const osm = await fromOsm(area, needs, exclude, origin);
     if (osm.length > 0) {
       return NextResponse.json({
         places: osm,

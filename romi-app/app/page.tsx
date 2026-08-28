@@ -197,7 +197,7 @@ const realStops = [
   },
 ];
 
-type Screen = "home" | "plan" | "results" | "report" | "saved";
+type Screen = "home" | "report" | "saved";
 
 type SavedDay = {
   id: string;
@@ -237,544 +237,303 @@ type TravelerReport = {
   returnAgain: string;
 };
 
+type Origin = { label: string; lat: number; lng: number };
+
+function compactName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[''`´]/g, "")
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "")
+    .replace(/^the/, "");
+}
+
+function isSamePlace(a: string, b: string) {
+  const ca = compactName(a);
+  const cb = compactName(b);
+  if (!ca || !cb) return false;
+  return ca === cb || ca.includes(cb) || cb.includes(ca);
+}
+
+function milesBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const r = 3958.8;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const la1 = (a.lat * Math.PI) / 180;
+  const la2 = (b.lat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("home");
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
-  const [location, setLocation] = useState("");
+  const [origin, setOrigin] = useState<Origin | null>(null);
+  const [locationDraft, setLocationDraft] = useState("");
+  const [placeSearch, setPlaceSearch] = useState("");
+  const [suggestions, setSuggestions] = useState<Array<{ id: string; name: string; area: string }>>([]);
+  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
+  const [searchPlaces, setSearchPlaces] = useState<NearbyPlace[]>([]);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [nearbyStatus, setNearbyStatus] = useState<"idle" | "loading" | "ready">("idle");
+  const [geoStatus, setGeoStatus] = useState("");
 
   const [travelerReports, setTravelerReports] = useState<TravelerReport[]>([]);
   const [hasLoadedReports, setHasLoadedReports] = useState(false);
   const [savedPlaceIds, setSavedPlaceIds] = useState<string[]>([]);
   const [savedDays, setSavedDays] = useState<SavedDay[]>([]);
-  const [highlightedId, setHighlightedId] = useState<string | null>(null);
-  const [dayName, setDayName] = useState("");
-  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
-  const [nearbyStatus, setNearbyStatus] = useState<"idle" | "loading" | "ready">("idle");
   const [scoutPoints, setScoutPoints] = useState(0);
-  const [showAlsoInArea, setShowAlsoInArea] = useState(false);
   const [viewingSavedDay, setViewingSavedDay] = useState<SavedDay | null>(null);
-  const [placeSearch, setPlaceSearch] = useState("");
-  const [googleSearchHits, setGoogleSearchHits] = useState<
-    Array<{
-      id: string;
-      name: string;
-      area: string;
-      lat: number;
-      lng: number;
-      rating?: number;
-      reviewCount?: number;
-      icon: string;
-    }>
-  >([]);
-  const [searchStatus, setSearchStatus] = useState<"idle" | "loading" | "ready">("idle");
+  const [dayName, setDayName] = useState("");
 
   const [reportName, setReportName] = useState("");
   const [reportArea, setReportArea] = useState("");
   const [reportNeeds, setReportNeeds] = useState<string[]>([]);
-  const [dogFriendly, setDogFriendly] = useState("");
-  const [shade, setShade] = useState("");
-  const [wifi, setWifi] = useState("");
-  const [vibe, setVibe] = useState("");
   const [reportNotes, setReportNotes] = useState("");
   const [returnAgain, setReturnAgain] = useState("");
+
+  const radiusMiles = 20;
+  const radiusMeters = 32000;
 
   useEffect(() => {
     try {
       const savedReports = window.localStorage.getItem("romi-traveler-reports");
-
       if (savedReports) {
-        const parsedReports = JSON.parse(savedReports);
-
-        if (Array.isArray(parsedReports)) {
-          setTravelerReports(parsedReports);
-        }
+        const parsed = JSON.parse(savedReports);
+        if (Array.isArray(parsed)) setTravelerReports(parsed);
       }
-
       const savedPlaces = window.localStorage.getItem("romi-saved-places");
       if (savedPlaces) {
-        const parsedPlaces = JSON.parse(savedPlaces);
-        if (Array.isArray(parsedPlaces)) {
-          setSavedPlaceIds(parsedPlaces);
-        }
+        const parsed = JSON.parse(savedPlaces);
+        if (Array.isArray(parsed)) setSavedPlaceIds(parsed);
       }
-
       const savedDayRaw = window.localStorage.getItem("romi-saved-days");
       if (savedDayRaw) {
-        const parsedDays = JSON.parse(savedDayRaw);
-        if (Array.isArray(parsedDays)) {
-          setSavedDays(parsedDays);
-        }
+        const parsed = JSON.parse(savedDayRaw);
+        if (Array.isArray(parsed)) setSavedDays(parsed);
       }
-
       const pointsRaw = window.localStorage.getItem("romi-scout-points");
       if (pointsRaw) {
-        const parsedPoints = Number(pointsRaw);
-        if (!Number.isNaN(parsedPoints)) setScoutPoints(parsedPoints);
+        const n = Number(pointsRaw);
+        if (!Number.isNaN(n)) setScoutPoints(n);
+      }
+      const originRaw = window.localStorage.getItem("romi-origin");
+      if (originRaw) {
+        const parsed = JSON.parse(originRaw) as Origin;
+        if (parsed?.lat && parsed?.lng) {
+          setOrigin(parsed);
+          setLocationDraft(parsed.label);
+        }
       }
     } catch {
-      // ROMI will simply start with no reports if storage is unavailable.
-    } finally {
-      setHasLoadedReports(true);
+      // ignore
     }
+    setHasLoadedReports(true);
   }, []);
 
   useEffect(() => {
     if (!hasLoadedReports) return;
-
     try {
-      window.localStorage.setItem(
-        "romi-traveler-reports",
-        JSON.stringify(travelerReports)
-      );
-      window.localStorage.setItem(
-        "romi-saved-places",
-        JSON.stringify(savedPlaceIds)
-      );
-      window.localStorage.setItem(
-        "romi-saved-days",
-        JSON.stringify(savedDays)
-      );
+      window.localStorage.setItem("romi-traveler-reports", JSON.stringify(travelerReports));
+      window.localStorage.setItem("romi-saved-places", JSON.stringify(savedPlaceIds));
+      window.localStorage.setItem("romi-saved-days", JSON.stringify(savedDays));
       window.localStorage.setItem("romi-scout-points", String(scoutPoints));
+      if (origin) window.localStorage.setItem("romi-origin", JSON.stringify(origin));
     } catch {
-      // Reports still work for this visit if device storage is unavailable.
+      // ignore
     }
-  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, hasLoadedReports]);
+  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, hasLoadedReports]);
 
   useEffect(() => {
-    if (screen !== "results" || !location.trim()) return;
-
+    if (!origin) {
+      setNearbyPlaces([]);
+      return;
+    }
     let cancelled = false;
     setNearbyStatus("loading");
-
-    const exclude = realStops.map((stop) => stop.name).join("|");
     const params = new URLSearchParams({
-      area: location,
+      area: origin.label,
       needs: selectedNeeds.join(","),
-      exclude,
+      lat: String(origin.lat),
+      lng: String(origin.lng),
+      radius: String(radiusMeters),
+      exclude: realStops.map((s) => s.name).join("|"),
     });
-
     fetch(`/api/nearby?${params.toString()}`)
-      .then((response) => response.json())
+      .then((r) => r.json())
       .then((data: { places?: NearbyPlace[] }) => {
-        if (cancelled) return;
-        setNearbyPlaces(data.places || []);
-        setNearbyStatus("ready");
+        if (!cancelled) {
+          setNearbyPlaces(data.places || []);
+          setNearbyStatus("ready");
+        }
       })
       .catch(() => {
-        if (cancelled) return;
-        setNearbyPlaces([]);
-        setNearbyStatus("ready");
+        if (!cancelled) {
+          setNearbyPlaces([]);
+          setNearbyStatus("ready");
+        }
       });
-
     return () => {
       cancelled = true;
     };
-  }, [screen, location, selectedNeeds]);
+  }, [origin, selectedNeeds]);
 
   useEffect(() => {
-    const q = placeSearch.trim();
-    if (q.length < 3) {
-      setGoogleSearchHits([]);
-      setSearchStatus("idle");
+    if (!origin || placeSearch.trim().length < 2) {
+      setSuggestions([]);
+      setSearchPlaces([]);
       return;
     }
-
+    const q = placeSearch.trim();
     const timer = window.setTimeout(() => {
-      setSearchStatus("loading");
-      fetch(`/api/search?q=${encodeURIComponent(q)}`)
-        .then((response) => response.json())
-        .then((data: { places?: typeof googleSearchHits }) => {
-          setGoogleSearchHits(data.places || []);
-          setSearchStatus("ready");
+      fetch(
+        `/api/autocomplete?q=${encodeURIComponent(q)}&lat=${origin.lat}&lng=${origin.lng}&radius=${radiusMeters}`,
+      )
+        .then((r) => r.json())
+        .then((data: { predictions?: Array<{ id: string; name: string; area: string }> }) => {
+          setSuggestions(data.predictions || []);
         })
-        .catch(() => {
-          setGoogleSearchHits([]);
-          setSearchStatus("ready");
-        });
-    }, 350);
+        .catch(() => setSuggestions([]));
 
+      fetch(
+        `/api/search?q=${encodeURIComponent(q)}&lat=${origin.lat}&lng=${origin.lng}&radius=${radiusMeters}`,
+      )
+        .then((r) => r.json())
+        .then((data: { places?: NearbyPlace[] }) => {
+          setSearchPlaces(data.places || []);
+        })
+        .catch(() => setSearchPlaces([]));
+    }, 220);
     return () => window.clearTimeout(timer);
-  }, [placeSearch]);
-
-  function toggleSavePlace(placeId: string) {
-    setSavedPlaceIds((current) =>
-      current.includes(placeId)
-        ? current.filter((id) => id !== placeId)
-        : [...current, placeId]
-    );
-  }
-
-  function toggleNeed(label: string) {
-    setSelectedNeeds((current) =>
-      current.includes(label)
-        ? current.filter((need) => need !== label)
-        : [...current, label]
-    );
-  }
-
-  function toggleReportNeed(label: string) {
-    setReportNeeds((current) =>
-      current.includes(label)
-        ? current.filter((need) => need !== label)
-        : [...current, label]
-    );
-  }
+  }, [placeSearch, origin]);
 
   function matchingNeeds(placeNeeds: string[]) {
     return selectedNeeds.filter((need) => placeNeeds.includes(need));
   }
 
-  function compactName(value: string) {
-    return value
-      .toLowerCase()
-      .replace(/[''`´]/g, "")
-      .replace(/&/g, "and")
-      .replace(/[^a-z0-9]+/g, "")
-      .replace(/^the/, "");
+  function inRadius(stop: { lat: number; lng: number }) {
+    if (!origin) return false;
+    return milesBetween(origin, stop) <= radiusMiles;
   }
 
-  function isSamePlace(a: string, b: string) {
-    const ca = compactName(a);
-    const cb = compactName(b);
-    if (!ca || !cb) return false;
-    return ca === cb || ca.includes(cb) || cb.includes(ca);
+  function verifiedHere() {
+    if (!origin) return [];
+    return realStops
+      .filter((stop) => inRadius(stop))
+      .filter((stop) =>
+        selectedNeeds.length === 0
+          ? true
+          : matchingNeeds(stop.helpsWith).length > 0,
+      )
+      .sort((a, b) => matchingNeeds(b.helpsWith).length - matchingNeeds(a.helpsWith).length);
   }
 
-  function stopsForLocation(currentLocation: string) {
-    const q = currentLocation.toLowerCase();
-    const paonia =
-      q.includes("paonia") ||
-      q.includes("hotchkiss") ||
-      q.includes("cedaredge") ||
-      q.includes("north fork") ||
-      q.includes("curecanti") ||
-      q.includes("wine");
-    const gunnison =
-      q.includes("gunnison") ||
-      q.includes("almont") ||
-      q.includes("lodgepole") ||
-      q.includes("taylor") ||
-      q.includes("powerstop");
-
-    if (paonia && !gunnison) {
-      return realStops.filter((stop) => stop.region === "paonia");
-    }
-    if (gunnison && !paonia) {
-      return realStops.filter((stop) => stop.region === "gunnison");
-    }
-    return realStops;
-  }
-
-  function defaultDayName(currentLocation: string) {
-    const q = currentLocation.toLowerCase();
-    if (
-      q.includes("paonia") ||
-      q.includes("hotchkiss") ||
-      q.includes("cedaredge") ||
-      q.includes("north fork") ||
-      q.includes("wine")
-    ) {
-      return "Paonia wine day";
-    }
-    if (
-      q.includes("gunnison") ||
-      q.includes("almont") ||
-      q.includes("lodgepole")
-    ) {
-      return "Gunnison Weekend";
-    }
-    return currentLocation.trim() || "My road day";
-  }
-
-  function rankedStops(currentLocation: string) {
-    const stops = [...stopsForLocation(currentLocation)];
-    if (selectedNeeds.length === 0) return stops;
-    return stops
-      .filter((stop) => matchingNeeds(stop.helpsWith).length > 0)
-      .sort((a, b) => {
-        const am = matchingNeeds(a.helpsWith).length;
-        const bm = matchingNeeds(b.helpsWith).length;
-        const aAll = am === selectedNeeds.length ? 1 : 0;
-        const bAll = bm === selectedNeeds.length ? 1 : 0;
-        return bAll - aAll || bm - am;
-      });
-  }
-
-  function extraStops(currentLocation: string) {
-    if (selectedNeeds.length === 0) return [];
-    return stopsForLocation(currentLocation).filter(
-      (stop) => matchingNeeds(stop.helpsWith).length === 0,
-    );
-  }
-
-  function nearbyLeads() {
-    return nearbyPlaces
+  function googleLeads() {
+    const pool = placeSearch.trim().length >= 2 ? searchPlaces : nearbyPlaces;
+    return pool
       .filter((place) => !realStops.some((stop) => isSamePlace(stop.name, place.name)))
       .filter((place) => {
-        if (selectedNeeds.length === 0 || place.helpsWith.length === 0) return true;
+        if (selectedNeeds.length === 0 || !place.helpsWith?.length) return true;
         return place.helpsWith.some((need) => selectedNeeds.includes(need));
       })
-      .slice(0, 5);
+      .slice(0, 8);
   }
 
-  function saveThisDay() {
-    const name = dayName.trim() || defaultDayName(location);
-    const ranked = rankedStops(location);
-    const matchedIds = ranked
-      .filter((stop) => matchingNeeds(stop.helpsWith).length > 0)
-      .map((stop) => stop.id);
-    const placeIds =
-      matchedIds.length > 0 ? matchedIds : ranked.map((stop) => stop.id);
-
-    const day: SavedDay = {
-      id: `day-${Date.now()}`,
-      name,
-      location,
-      needs: selectedNeeds,
-      placeIds,
-    };
-
-    setSavedDays((current) => [
-      day,
-      ...current.filter(
-        (existing) =>
-          existing.name !== day.name || existing.location !== day.location
-      ),
-    ]);
-    setDayName(name);
-  }
-
-  function openDay(day: SavedDay) {
-    setViewingSavedDay(day);
-    setLocation(day.location);
-    setSelectedNeeds(day.needs);
-    setDayName(day.name);
-    setScreen("results");
-  }
-
-  function placeLookups() {
-    const q = compactName(placeSearch);
-    if (placeSearch.trim().length < 2) return [];
-    const hits: Array<{
-      id: string;
-      name: string;
-      area: string;
-      status: "verified" | "your-scout" | "google";
-      detail: string;
-      lat?: number;
-      lng?: number;
-      icon: string;
-      rating?: number;
-    }> = [];
-
-    for (const stop of realStops) {
-      if (q && (compactName(stop.name).includes(q) || compactName(stop.area).includes(q))) {
-        hits.push({
-          id: stop.id,
-          name: stop.name,
-          area: stop.area,
-          status: "verified",
-          detail: `Scout verified · ${stop.helpsWith.join(" · ")}`,
-          lat: stop.lat,
-          lng: stop.lng,
-          icon: stop.icon,
-        });
-      }
+  function allCards() {
+    if (viewingSavedDay?.placeIds.length) {
+      return realStops.filter((s) => viewingSavedDay.placeIds.includes(s.id));
     }
-
-    for (const report of travelerReports) {
-      if (
-        q &&
-        (compactName(report.name).includes(q) || compactName(report.area).includes(q))
-      ) {
-        if (hits.some((hit) => isSamePlace(hit.name, report.name))) continue;
-        hits.push({
-          id: `report-${report.name}`,
-          name: report.name,
-          area: report.area,
-          status: "your-scout",
-          detail: "Your scout report · not community-verified yet",
-          icon: "🧭",
-        });
-      }
-    }
-
-    for (const place of googleSearchHits) {
-      const verified = realStops.find((stop) => isSamePlace(stop.name, place.name));
-      if (verified) {
-        if (!hits.some((hit) => hit.id === verified.id)) {
-          hits.unshift({
-            id: verified.id,
-            name: verified.name,
-            area: verified.area,
-            status: "verified",
-            detail: `Scout verified · ${verified.helpsWith.join(" · ")}`,
-            lat: verified.lat,
-            lng: verified.lng,
-            icon: verified.icon,
-            rating: place.rating,
-          });
-        }
-        continue;
-      }
-      if (hits.some((hit) => isSamePlace(hit.name, place.name))) continue;
-      hits.push({
-        id: place.id,
-        name: place.name,
-        area: place.area,
-        status: "google",
-        detail: place.rating
-          ? `Google listing · ★ ${place.rating} · Needs a scout`
-          : "Google listing · Needs a scout",
-        lat: place.lat,
-        lng: place.lng,
-        icon: place.icon,
-        rating: place.rating,
-      });
-    }
-
-    return hits.slice(0, 8);
+    return [
+      ...verifiedHere().map((s) => ({ ...s, status: "verified" as const })),
+      ...googleLeads().map((s) => ({ ...s, status: "google" as const })),
+    ];
   }
 
-  function lookupMapStops() {
-    return placeLookups()
-      .filter((hit) => typeof hit.lat === "number" && typeof hit.lng === "number")
-      .map((hit) => ({
-        id: hit.id,
-        name: hit.name,
-        area: hit.area,
-        icon: hit.icon,
-        lat: hit.lat as number,
-        lng: hit.lng as number,
+  function mapStops() {
+    return allCards()
+      .filter((s) => typeof s.lat === "number")
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        area: s.area,
+        icon: s.icon,
+        lat: s.lat,
+        lng: s.lng,
+        kind: "status" in s && s.status === "google" ? ("google" as const) : ("verified" as const),
       }));
   }
 
-  function renderLookup() {
-    const hits = placeLookups();
-    const pins = lookupMapStops();
-    return (
-      <section className="mt-8 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100">
-        <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-          LOOK UP A PLACE
-        </p>
-        <h3 className="mt-1 text-2xl font-black text-slate-900">
-          Search Google + ROMI
-        </h3>
-        <p className="mt-2 text-sm text-slate-600">
-          Type a real name. We’ll show if it’s scout-verified, your report, or
-          only a Google lead — on the same map.
-        </p>
-        <input
-          value={placeSearch}
-          onChange={(event) => setPlaceSearch(event.target.value)}
-          placeholder="Gaylord Hotel, Big B’s, Powerstop…"
-          className="mt-4 w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
-        />
-        {searchStatus === "loading" ? (
-          <p className="mt-3 text-sm font-semibold text-slate-500">
-            Searching Google…
-          </p>
-        ) : null}
-        {pins.length > 0 ? (
-          <div className="mt-4">
-            <RomiMap
-              stops={pins}
-              onSelect={(id) => {
-                document
-                  .getElementById(`lookup-${id}`)
-                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
-              }}
-            />
-          </div>
-        ) : null}
-        {placeSearch.trim().length >= 2 && (
-          <div className="mt-4 space-y-3">
-            {hits.map((hit) => (
-              <article
-                key={`${hit.status}-${hit.id}`}
-                id={`lookup-${hit.id}`}
-                className="rounded-2xl bg-amber-50 p-4"
-              >
-                <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
-                  {hit.status === "verified"
-                    ? "SCOUT VERIFIED"
-                    : hit.status === "your-scout"
-                      ? "YOUR SCOUT REPORT"
-                      : "GOOGLE · NEEDS A SCOUT"}
-                </p>
-                <h4 className="mt-1 font-black text-slate-900">{hit.name}</h4>
-                <p className="text-sm text-slate-500">{hit.area}</p>
-                <p className="mt-1 text-sm text-slate-600">{hit.detail}</p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {hit.status !== "verified" ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        startPlaceReport({ name: hit.name, area: hit.area })
-                      }
-                      className="rounded-full bg-orange-600 px-4 py-2 text-sm font-bold text-white"
-                    >
-                      Scout it
-                    </button>
-                  ) : (
-                    <span className="rounded-full bg-teal-700 px-4 py-2 text-center text-sm font-bold text-white">
-                      On the ROMI list
-                    </span>
-                  )}
-                  {hit.lat && hit.lng ? (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${hit.lat},${hit.lng}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-full border border-teal-700 px-4 py-2 text-center text-sm font-bold text-teal-700"
-                    >
-                      Maps
-                    </a>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+  function selectedCard() {
+    return allCards().find((s) => s.id === highlightedId) || null;
+  }
+
+  async function applyOrigin(label: string, lat: number, lng: number) {
+    const next = { label, lat, lng };
+    setOrigin(next);
+    setLocationDraft(label);
+    setViewingSavedDay(null);
+    setHighlightedId(null);
+  }
+
+  async function geocodeDraft(event?: FormEvent) {
+    event?.preventDefault();
+    const q = locationDraft.trim();
+    if (!q) return;
+    setGeoStatus("Finding that area…");
+    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    if (data.lat) {
+      await applyOrigin(data.label || q, data.lat, data.lng);
+      setGeoStatus("");
+    } else {
+      setGeoStatus("Couldn’t find that place. Try a city name.");
+    }
+  }
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setGeoStatus("This browser won’t share location.");
+      return;
+    }
+    setGeoStatus("Getting your location…");
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const res = await fetch(`/api/geocode?lat=${latitude}&lng=${longitude}`);
+        const data = await res.json();
+        await applyOrigin(data.label || "Near you", latitude, longitude);
+        setGeoStatus("");
+      },
+      () => setGeoStatus("Location was blocked. Type a city instead."),
     );
   }
 
-  function planStops() {
-    if (viewingSavedDay?.placeIds.length) {
-      const picked = realStops.filter((stop) =>
-        viewingSavedDay.placeIds.includes(stop.id),
-      );
-      if (picked.length) return picked;
-    }
-    return rankedStops(location);
-  }
-
-  function findHelpfulStops(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (location.trim()) {
-      setViewingSavedDay(null);
-      setDayName((current) => current || defaultDayName(location));
-      setScreen("results");
+  async function pickSuggestion(id: string, name: string) {
+    setPlaceSearch(name);
+    setSuggestions([]);
+    const res = await fetch(`/api/place?id=${encodeURIComponent(id)}`);
+    const data = await res.json();
+    if (data.place) {
+      setSearchPlaces((current) => {
+        const next = current.filter((p) => p.id !== data.place.id);
+        return [data.place, ...next];
+      });
+      setHighlightedId(data.place.id);
     }
   }
 
-  function chooseSuggestedArea(area: string) {
-    setViewingSavedDay(null);
-    setLocation(area);
-    setDayName(defaultDayName(area));
-    setScreen("results");
+  function toggleNeed(label: string) {
+    setSelectedNeeds((current) =>
+      current.includes(label) ? current.filter((n) => n !== label) : [...current, label],
+    );
   }
 
   function startPlaceReport(prefill?: { name?: string; area?: string }) {
     setReportName(prefill?.name || "");
-    setReportArea(prefill?.area || location);
+    setReportArea(prefill?.area || origin?.label || "");
     setReportNeeds(selectedNeeds);
-    setDogFriendly("");
-    setShade("");
-    setWifi("");
-    setVibe("");
     setReportNotes("");
     setReturnAgain("");
     setScreen("report");
@@ -782,77 +541,169 @@ export default function Home() {
 
   function savePlaceReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     if (!reportName.trim() || !reportArea.trim()) return;
-
     const newReport: TravelerReport = {
       name: reportName.trim(),
       area: reportArea.trim(),
       helpsWith: reportNeeds,
-      dogFriendly,
-      shade,
-      wifi,
-      vibe,
+      dogFriendly: "",
+      shade: "",
+      wifi: "",
+      vibe: "",
       notes: reportNotes.trim(),
       returnAgain,
     };
-
     setTravelerReports((current) => [newReport, ...current]);
-    const earned =
-      10 +
-      (newReport.notes ? 10 : 0) +
-      (newReport.helpsWith.length >= 2 ? 5 : 0);
-    setScoutPoints((current) => current + earned);
-    setLocation(reportArea.trim());
-    setScreen("results");
+    setScoutPoints((n) => n + 10 + (newReport.notes ? 10 : 0));
+    setScreen("home");
   }
 
-  function goHome() {
-    setSelectedNeeds([]);
-    setLocation("");
-    setViewingSavedDay(null);
-    setPlaceSearch("");
+  function saveThisDay() {
+    if (!origin) return;
+    const name = dayName.trim() || `${origin.label.split(",")[0]} day`;
+    const placeIds = verifiedHere().map((s) => s.id);
+    setSavedDays((current) => [
+      {
+        id: `${Date.now()}`,
+        name,
+        location: origin.label,
+        needs: selectedNeeds,
+        placeIds,
+      },
+      ...current.filter((d) => d.name !== name),
+    ]);
+  }
+
+  function openDay(day: SavedDay) {
+    setViewingSavedDay(day);
+    setSelectedNeeds(day.needs);
+    setDayName(day.name);
     setScreen("home");
+    const match = realStops.find((s) => day.placeIds.includes(s.id));
+    if (match) applyOrigin(day.location, match.lat, match.lng);
   }
 
   function Nav() {
     const items: Array<{ id: Screen; label: string }> = [
-      { id: "home", label: "Today" },
+      { id: "home", label: "Explore" },
       { id: "saved", label: "Plans" },
-      { id: "results", label: "Stops" },
       { id: "report", label: "Scouts" },
     ];
     return (
       <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-amber-100 bg-white/95 px-2 py-2">
-        <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
-          {items.map((item) => {
-            const on = screen === item.id || (item.id === "results" && screen === "plan");
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  if (item.id === "results") {
-                    setViewingSavedDay(null);
-                    setScreen(location.trim() ? "results" : "plan");
-                    return;
-                  }
-                  if (item.id === "home") {
-                    goHome();
-                    return;
-                  }
-                  setScreen(item.id);
-                }}
-                className={`rounded-2xl px-2 py-2 text-xs font-bold ${
-                  on ? "bg-teal-700 text-white" : "text-slate-500"
-                }`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
+        <div className="mx-auto grid max-w-md grid-cols-3 gap-1">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                if (item.id === "home") setViewingSavedDay(null);
+                setScreen(item.id);
+              }}
+              className={`rounded-2xl px-2 py-2 text-xs font-bold ${
+                screen === item.id ? "bg-teal-700 text-white" : "text-slate-500"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       </nav>
+    );
+  }
+
+  function renderCard(place: {
+    id: string;
+    name: string;
+    area: string;
+    icon: string;
+    lat: number;
+    lng: number;
+    helpsWith?: string[];
+    description?: string;
+    note?: string;
+    rating?: number;
+    website?: string;
+    status?: "verified" | "google";
+  }) {
+    const status = place.status || "verified";
+    const matches = matchingNeeds(place.helpsWith || []);
+    const saved = savedPlaceIds.includes(place.id);
+    return (
+      <article
+        key={place.id}
+        id={`place-${place.id}`}
+        className={`rounded-3xl bg-white p-4 shadow-sm ring-1 ${
+          highlightedId === place.id ? "ring-2 ring-orange-500" : "ring-amber-100"
+        }`}
+      >
+        <div className="flex gap-3">
+          <span className="text-3xl">{place.icon}</span>
+          <div className="min-w-0">
+            <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
+              {status === "verified" ? "SCOUT VERIFIED" : "GOOGLE · NEEDS A SCOUT"}
+            </p>
+            <h4 className="mt-1 text-lg font-black leading-6 text-slate-900">{place.name}</h4>
+            <p className="text-xs font-semibold text-slate-500">📍 {place.area}</p>
+          </div>
+        </div>
+        {place.rating ? (
+          <p className="mt-2 text-sm font-bold text-teal-800">★ {place.rating}</p>
+        ) : null}
+        {place.helpsWith && place.helpsWith.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {place.helpsWith.map((need) => (
+              <span
+                key={need}
+                className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                  matches.includes(need) ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {need}
+              </span>
+            ))}
+          </div>
+        )}
+        {place.description ? (
+          <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">{place.description}</p>
+        ) : null}
+        {place.note ? (
+          <p className="mt-2 line-clamp-2 text-sm font-semibold text-teal-800">🧭 {place.note}</p>
+        ) : null}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {status === "verified" ? (
+            <button
+              type="button"
+              onClick={() =>
+                setSavedPlaceIds((cur) =>
+                  cur.includes(place.id) ? cur.filter((id) => id !== place.id) : [...cur, place.id],
+                )
+              }
+              className={`rounded-full px-4 py-3 text-sm font-bold ${
+                saved ? "border border-teal-700 bg-white text-teal-700" : "bg-orange-600 text-white"
+              }`}
+            >
+              {saved ? "Saved" : "Save"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => startPlaceReport({ name: place.name, area: place.area })}
+              className="rounded-full bg-orange-600 px-4 py-3 text-sm font-bold text-white"
+            >
+              Scout it
+            </button>
+          )}
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full border border-teal-700 px-4 py-3 text-center text-sm font-bold text-teal-700"
+          >
+            Maps
+          </a>
+        </div>
+      </article>
     );
   }
 
@@ -860,584 +711,42 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-amber-50 px-5 py-8 pb-28 text-slate-800">
         <section className="mx-auto max-w-md">
-          <button
-            type="button"
-            onClick={goHome}
-            className="text-sm font-bold text-teal-700"
-          >
-            ← Today
+          <button type="button" onClick={() => setScreen("home")} className="text-sm font-bold text-teal-700">
+            ← Explore
           </button>
-
-          <header className="mt-6">
-            <p className="text-sm font-bold tracking-[0.22em] text-teal-700">
-              ROMI SCOUT REPORT
-            </p>
-            <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">
-              Your scouts
-            </h1>
-            <p className="mt-2 text-2xl font-black text-teal-800">{scoutPoints} pts</p>
-            <p className="mt-2 leading-6 text-slate-600">
-              Your reports live here — not on Today. Honest notes are what make
-              ROMI useful.
-            </p>
-          </header>
-
-          {travelerReports.length > 0 && (
-            <div className="mt-8 space-y-3">
-              {travelerReports.map((report, index) => (
-                <article
-                  key={`${report.name}-${index}`}
-                  className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-teal-100"
-                >
-                  <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
-                    YOUR SCOUT REPORT
-                  </p>
-                  <h3 className="mt-1 font-black text-slate-900">{report.name}</h3>
-                  <p className="text-sm text-slate-500">📍 {report.area}</p>
-                </article>
-              ))}
-            </div>
-          )}
-
-          <form onSubmit={savePlaceReport} className="mt-8 space-y-6">
-            <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100">
-              <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-                PLACE BASICS
-              </p>
-
-              <label htmlFor="reportName" className="mt-4 block text-sm font-bold">
-                Place name
-              </label>
-              <input
-                id="reportName"
-                required
-                value={reportName}
-                onChange={(event) => setReportName(event.target.value)}
-                placeholder="Example: Lodgepole Campground"
-                className="mt-2 w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
-              />
-
-              <label htmlFor="reportArea" className="mt-4 block text-sm font-bold">
-                Town, area, or state
-              </label>
-              <input
-                id="reportArea"
-                required
-                value={reportArea}
-                onChange={(event) => setReportArea(event.target.value)}
-                placeholder="Example: Gunnison, Colorado"
-                className="mt-2 w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
-              />
-            </section>
-
-            <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100">
-              <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-                WHAT CAN THIS PLACE HELP WITH?
-              </p>
-
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {needs.map((need) => {
-                  const chosen = reportNeeds.includes(need.label);
-
-                  return (
-                    <button
-                      key={need.label}
-                      type="button"
-                      onClick={() => toggleReportNeed(need.label)}
-                      className={`rounded-2xl p-3 text-left ring-1 ${
-                        chosen
-                          ? "bg-orange-500 text-white ring-orange-500"
-                          : "bg-amber-50 text-slate-800 ring-amber-100"
-                      }`}
-                    >
-                      <span className="text-2xl">{need.icon}</span>
-                      <span className="mt-2 block text-sm font-bold">
-                        {need.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100">
-              <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-                TRAVELER DETAILS
-              </p>
-
-              <label className="mt-4 block text-sm font-bold">
-                🐾 Dog friendliness
-              </label>
-              <select
-                value={dogFriendly}
-                onChange={(event) => setDogFriendly(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-amber-200 px-4 py-3"
-              >
-                <option value="">I’m not sure / did not check</option>
-                <option value="Dog-friendly">Dog-friendly</option>
-                <option value="Dogs allowed with limits">Dogs allowed with limits</option>
-                <option value="Not dog-friendly">Not dog-friendly</option>
-              </select>
-
-              <label className="mt-4 block text-sm font-bold">
-                🌤️ Shade and comfort
-              </label>
-              <select
-                value={shade}
-                onChange={(event) => setShade(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-amber-200 px-4 py-3"
-              >
-                <option value="">I’m not sure / did not check</option>
-                <option value="Lots of shade">Lots of shade</option>
-                <option value="Some shade">Some shade</option>
-                <option value="Very little shade">Very little shade</option>
-              </select>
-
-              <label className="mt-4 block text-sm font-bold">
-                📶 Wi-Fi or cell
-              </label>
-              <select
-                value={wifi}
-                onChange={(event) => setWifi(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-amber-200 px-4 py-3"
-              >
-                <option value="">I’m not sure / did not check</option>
-                <option value="Wi-Fi available">Wi-Fi available</option>
-                <option value="Cell signal worked">Cell signal worked</option>
-                <option value="Limited signal">Limited signal</option>
-                <option value="No useful signal">No useful signal</option>
-              </select>
-
-              <label htmlFor="vibe" className="mt-4 block text-sm font-bold">
-                ✨ What was the vibe?
-              </label>
-              <input
-                id="vibe"
-                value={vibe}
-                onChange={(event) => setVibe(event.target.value)}
-                placeholder="Quiet, family-friendly, scenic, busy..."
-                className="mt-2 w-full rounded-2xl border border-amber-200 px-4 py-3"
-              />
-
-              <label htmlFor="notes" className="mt-4 block text-sm font-bold">
-                Your honest notes
-              </label>
-              <textarea
-                id="notes"
-                rows={5}
-                value={reportNotes}
-                onChange={(event) => setReportNotes(event.target.value)}
-                placeholder="What should another traveler know before they go?"
-                className="mt-2 w-full resize-none rounded-2xl border border-amber-200 px-4 py-3"
-              />
-
-              <label className="mt-4 block text-sm font-bold">
-                Would you come back?
-              </label>
-              <select
-                value={returnAgain}
-                onChange={(event) => setReturnAgain(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-amber-200 px-4 py-3"
-              >
-                <option value="">Choose one</option>
-                <option value="Absolutely, I would come back">
-                  Absolutely, I would come back
-                </option>
-                <option value="Maybe, depending on the trip">
-                  Maybe, depending on the trip
-                </option>
-                <option value="Probably not">Probably not</option>
-              </select>
-            </section>
-
-            <button
-              type="submit"
-              disabled={!reportName.trim() || !reportArea.trim()}
-              className="w-full rounded-full bg-orange-600 px-5 py-4 font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-orange-300"
-            >
-              Save my real place report →
-            </button>
-
-            <p className="pb-3 text-center text-xs text-slate-500">
-              Reports save on this device and will still be here after you refresh.
-            </p>
-          </form>
-        </section>
-        <Nav />
-      </main>
-    );
-  }
-
-  if (screen === "results") {
-    return (
-      <main className="min-h-screen bg-amber-50 px-5 py-8 pb-28 text-slate-800">
-        <section className="mx-auto max-w-md">
-          <button
-            type="button"
-            onClick={() => {
-              if (viewingSavedDay) {
-                setViewingSavedDay(null);
-                setScreen("saved");
-                return;
-              }
-              setScreen("plan");
-            }}
-            className="text-sm font-bold text-teal-700"
-          >
-            {viewingSavedDay ? "← Back to saved plans" : "← Change my starting area"}
-          </button>
-
-          <header className="mt-6">
-            <p className="text-sm font-bold tracking-[0.22em] text-teal-700">
-              {viewingSavedDay ? "SAVED PLAN" : "ROMI"}
-            </p>
-            <h1 className="mt-2 text-4xl font-black text-slate-900">
-              {viewingSavedDay ? viewingSavedDay.name : "Your Helpful Stops"}
-            </h1>
-            <p className="mt-2 text-slate-600">
-              {viewingSavedDay
-                ? `Just this plan · ${location}`
-                : `Your ROMI plan for ${location}.`}
-            </p>
-          </header>
-
-          {!viewingSavedDay ? renderLookup() : null}
-
-          <section className="mt-7 rounded-3xl bg-teal-700 p-6 text-white shadow-lg">
-            <p className="text-xs font-bold tracking-[0.18em] text-teal-100">
-              YOUR ROAD-DAY MISSION
-            </p>
-            <h2 className="mt-2 text-2xl font-black">
-              {selectedNeeds.length} thing
-              {selectedNeeds.length === 1 ? "" : "s"} to handle
-            </h2>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {selectedNeeds.map((need) => (
-                <span
-                  key={need}
-                  className="rounded-full bg-white/15 px-3 py-1 text-sm font-semibold"
-                >
-                  {need}
-                </span>
-              ))}
-            </div>
-          </section>
-
-          <RomiMap
-            stops={planStops()}
-            onSelect={(id) => {
-              setHighlightedId(id);
-              document
-                .getElementById(`place-${id}`)
-                ?.scrollIntoView({ behavior: "smooth", block: "center" });
-            }}
-          />
-
-          <section className="mt-8">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-              MATCHED STOPS
-            </p>
-            <h3 className="mt-1 text-2xl font-black text-slate-900">
-              {selectedNeeds.length >= 2
-                ? `${selectedNeeds.join(" + ")} together`
-                : "Places for this mission"}
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Best first: stops that cover more of what you tapped. One card =
-              what that stop actually does.
-            </p>
-
-            <div className="mt-5 space-y-3">
-              {planStops().length === 0 ? (
-                <p className="rounded-3xl bg-white p-5 text-sm text-slate-600 shadow-sm">
-                  No scout-verified stop covers that mix yet. Check a few leads
-                  below, or add a place you know.
-                </p>
-              ) : null}
-              {planStops().map((stop) => {
-                const matches = matchingNeeds(stop.helpsWith);
-                const saved = savedPlaceIds.includes(stop.id);
-                const perfect =
-                  selectedNeeds.length >= 2 &&
-                  matches.length === selectedNeeds.length;
-
-                return (
-                  <article
-                    key={stop.id}
-                    id={`place-${stop.id}`}
-                    className={`rounded-3xl bg-white p-4 shadow-sm ring-1 ${
-                      highlightedId === stop.id || perfect
-                        ? "ring-2 ring-orange-500"
-                        : "ring-amber-100"
-                    }`}
-                  >
-                    <div className="flex gap-3">
-                      <span className="text-3xl">{stop.icon}</span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
-                          {perfect
-                            ? `TOGETHER · ${matches.join(" + ")}`
-                            : `SCOUT VERIFIED · ${matches.join(" · ") || "MATCH"}`}
-                        </p>
-                        <h4 className="mt-1 text-lg font-black leading-6 text-slate-900">
-                          {stop.name}
-                        </h4>
-                        <p className="text-xs font-semibold text-slate-500">
-                          📍 {stop.area}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {stop.helpsWith.map((need) => {
-                        const on = matches.includes(need);
-                        return (
-                          <span
-                            key={need}
-                            className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                              on
-                                ? "bg-orange-500 text-white"
-                                : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {need}
-                          </span>
-                        );
-                      })}
-                    </div>
-
-                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
-                      {stop.description}
-                    </p>
-
-                    <p className="mt-3 line-clamp-2 text-sm font-semibold text-teal-800">
-                      🧭 {stop.note}
-                    </p>
-
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleSavePlace(stop.id)}
-                        className={`rounded-full px-4 py-3 text-sm font-bold ${
-                          saved
-                            ? "border border-teal-700 bg-white text-teal-700"
-                            : "bg-orange-600 text-white"
-                        }`}
-                      >
-                        {saved ? "Saved" : "Save"}
-                      </button>
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-full border border-teal-700 px-4 py-3 text-center text-sm font-bold text-teal-700"
-                      >
-                        Maps
-                      </a>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-
-            {!viewingSavedDay && extraStops(location).length > 0 ? (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAlsoInArea((open) => !open)}
-                  className="w-full rounded-full border border-amber-200 bg-white px-5 py-3 text-sm font-bold text-slate-600"
-                >
-                  {showAlsoInArea
-                    ? "Hide other stops in this area"
-                    : `Show ${extraStops(location).length} more in this area`}
-                </button>
-                {showAlsoInArea ? (
-                  <div className="mt-3 space-y-3">
-                    {extraStops(location).map((stop) => (
-                      <article
-                        key={`extra-${stop.id}`}
-                        className="rounded-3xl bg-white p-4 opacity-90 shadow-sm ring-1 ring-slate-100"
-                      >
-                        <p className="text-xs font-bold tracking-[0.14em] text-slate-400">
-                          NOT THIS MISSION
-                        </p>
-                        <h4 className="mt-1 font-black text-slate-800">
-                          {stop.icon} {stop.name}
-                        </h4>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {stop.helpsWith.join(" · ")}
-                        </p>
-                      </article>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
-
-          {!viewingSavedDay && <section className="mt-8">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-              NEEDS A SCOUT
-            </p>
-            <h3 className="mt-1 text-2xl font-black text-slate-900">
-              A few unscouted leads
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Not on the verified list. Google facts only. We hide places you
-              already scouted.
-            </p>
-
-            {nearbyStatus === "loading" ? (
-              <p className="mt-4 text-sm font-semibold text-slate-500">
-                Looking around {location}…
-              </p>
-            ) : nearbyLeads().length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">
-                No extra listings right now. Add a place you know instead.
-              </p>
-            ) : (
-              <div className="mt-4 space-y-4">
-                {nearbyLeads().map((place) => (
-                  <article
-                    key={place.id}
-                    className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-dashed ring-amber-300"
-                  >
-                    <div className="flex gap-3">
-                      <span className="text-3xl">{place.icon}</span>
-                      <div>
-                        <p className="text-xs font-bold tracking-[0.14em] text-orange-700">
-                          NEEDS A SCOUT
-                          {place.source === "google" ? " · GOOGLE LISTING" : " · MAP LISTING"}
-                        </p>
-                        <h4 className="mt-1 text-lg font-black text-slate-900">
-                          {place.name}
-                        </h4>
-                        <p className="text-sm font-semibold text-slate-500">
-                          📍 {place.area}
-                        </p>
-                      </div>
-                    </div>
-
-                    {place.rating ? (
-                      <p className="mt-3 text-sm font-bold text-teal-800">
-                        ★ {place.rating}
-                        {place.reviewCount ? ` · ${place.reviewCount} Google reviews` : " on Google"}
-                      </p>
-                    ) : null}
-
-                    {place.description ? (
-                      <p className="mt-3 text-sm leading-6 text-slate-600">
-                        {place.description}
-                      </p>
-                    ) : null}
-
-                    {place.helpsWith.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {place.helpsWith.map((need) => (
-                          <span
-                            key={need}
-                            className="rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-orange-700"
-                          >
-                            {need}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {place.reviewSnippet ? (
-                      <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm text-slate-700">
-                        “{place.reviewSnippet}”
-                        <span className="mt-1 block text-xs font-semibold text-slate-500">
-                          Google review — not a Romi scout
-                        </span>
-                      </p>
-                    ) : null}
-
-                    {place.note ? (
-                      <p className="mt-4 rounded-2xl bg-teal-50 p-3 text-sm font-semibold text-teal-800">
-                        🧭 {place.note}
-                      </p>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        startPlaceReport({
-                          name: place.name,
-                          area: place.area,
-                        })
-                      }
-                      className="mt-4 w-full rounded-full bg-orange-600 px-5 py-3 font-bold text-white"
-                    >
-                      Scout this place · earn points
-                    </button>
-                    {place.website ? (
-                      <a
-                        href={place.website}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 block w-full rounded-full border border-orange-300 px-5 py-3 text-center font-bold text-orange-700"
-                      >
-                        Website
-                      </a>
-                    ) : null}
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 block w-full rounded-full border border-teal-700 px-5 py-3 text-center font-bold text-teal-700"
-                    >
-                      Open in Maps
-                    </a>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>}
-
-          {!viewingSavedDay && <section className="mt-8 rounded-3xl border border-orange-200 bg-orange-50 p-5">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-              SAVE THIS DAY
-            </p>
-            <h3 className="mt-1 text-2xl font-black text-slate-900">
-              Keep this plan
-            </h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Reopen it later on this phone — needs, area, and matching stops.
-            </p>
+          <h1 className="mt-6 text-4xl font-black">Your scouts</h1>
+          <p className="mt-2 text-2xl font-black text-teal-800">{scoutPoints} pts</p>
+          {travelerReports.map((report, i) => (
+            <article key={`${report.name}-${i}`} className="mt-4 rounded-3xl bg-white p-4 shadow-sm">
+              <p className="text-xs font-bold text-teal-700">YOUR SCOUT REPORT</p>
+              <h3 className="font-black">{report.name}</h3>
+              <p className="text-sm text-slate-500">📍 {report.area}</p>
+            </article>
+          ))}
+          <form onSubmit={savePlaceReport} className="mt-8 space-y-4">
+            <h2 className="text-xl font-black">Add a report</h2>
             <input
-              value={dayName}
-              onChange={(event) => setDayName(event.target.value)}
-              placeholder={defaultDayName(location)}
-              className="mt-4 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+              required
+              value={reportName}
+              onChange={(e) => setReportName(e.target.value)}
+              placeholder="Place name"
+              className="w-full rounded-2xl border border-amber-200 px-4 py-3"
             />
-            <button
-              type="button"
-              onClick={saveThisDay}
-              className="mt-3 w-full rounded-full bg-orange-600 px-5 py-3 font-bold text-white"
-            >
-              Save this day
-            </button>
-            {savedDays.some(
-              (day) =>
-                day.location === location &&
-                (day.name === dayName.trim() ||
-                  day.name === defaultDayName(location))
-            ) ? (
-              <p className="mt-3 text-center text-sm font-semibold text-teal-800">
-                Saved. You’ll see it on the home screen after refresh.
-              </p>
-            ) : null}
-          </section>}
-
-          <button
-            type="button"
-            onClick={goHome}
-            className="mt-6 w-full rounded-full border border-teal-700 bg-white px-5 py-3 font-bold text-teal-700"
-          >
-            Start a new road-day mission
-          </button>
+            <input
+              required
+              value={reportArea}
+              onChange={(e) => setReportArea(e.target.value)}
+              placeholder="Town / area"
+              className="w-full rounded-2xl border border-amber-200 px-4 py-3"
+            />
+            <textarea
+              value={reportNotes}
+              onChange={(e) => setReportNotes(e.target.value)}
+              placeholder="What was it actually like?"
+              className="h-28 w-full rounded-2xl border border-amber-200 px-4 py-3"
+            />
+            <button className="w-full rounded-full bg-orange-600 py-4 font-bold text-white">Save report</button>
+          </form>
         </section>
         <Nav />
       </main>
@@ -1448,17 +757,10 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-amber-50 px-5 py-8 pb-28 text-slate-800">
         <section className="mx-auto max-w-md">
-          <p className="text-sm font-bold tracking-[0.22em] text-teal-700">
-            ROMI
-          </p>
-          <h1 className="mt-2 text-4xl font-black text-slate-900">Your plans</h1>
-          <p className="mt-2 text-slate-600">
-            Saved days only. Open one to see just that plan.
-          </p>
+          <h1 className="text-4xl font-black">Your plans</h1>
+          <p className="mt-2 text-slate-600">Open a saved day. You’ll only see that plan.</p>
           {savedDays.length === 0 ? (
-            <p className="mt-8 rounded-3xl bg-white p-5 text-sm text-slate-600 shadow-sm">
-              No saved plans yet. Build a quick plan, then tap Save this day.
-            </p>
+            <p className="mt-8 rounded-3xl bg-white p-5 text-sm text-slate-600">No plans yet — save one from Explore.</p>
           ) : (
             <div className="mt-8 space-y-3">
               {savedDays.map((day) => (
@@ -1468,10 +770,10 @@ export default function Home() {
                   onClick={() => openDay(day)}
                   className="w-full rounded-3xl bg-white p-5 text-left shadow-sm ring-1 ring-amber-100"
                 >
-                  <p className="text-lg font-black text-slate-900">{day.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="text-lg font-black">{day.name}</p>
+                  <p className="text-sm text-slate-500">
                     📍 {day.location}
-                    {day.needs.length > 0 ? ` · ${day.needs.join(" + ")}` : ""}
+                    {day.needs.length ? ` · ${day.needs.join(" + ")}` : ""}
                   </p>
                 </button>
               ))}
@@ -1483,193 +785,165 @@ export default function Home() {
     );
   }
 
-  if (screen === "plan") {
-    return (
-      <main className="min-h-screen bg-amber-50 px-5 py-8 pb-28 text-slate-800">
-        <section className="mx-auto max-w-md">
-          <button
-            type="button"
-            onClick={() => setScreen("home")}
-            className="text-sm font-bold text-teal-700"
-          >
-            ← Edit my road-day mission
-          </button>
-
-          <header className="mt-6">
-            <p className="text-sm font-bold tracking-[0.22em] text-teal-700">
-              ROMI
-            </p>
-            <h1 className="mt-2 text-4xl font-black text-slate-900">
-              Your Quick Plan
-            </h1>
-            <p className="mt-2 text-slate-600">
-              Let’s build a practical next stop around what you actually need.
-            </p>
-          </header>
-
-          <section className="mt-7 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-              STARTING AREA
-            </p>
-            <h3 className="mt-1 text-2xl font-black text-slate-900">
-              Where are you headed?
-            </h3>
-
-            <form onSubmit={findHelpfulStops} className="mt-5">
-              <input
-                value={location}
-                onChange={(event) => setLocation(event.target.value)}
-                placeholder="Try Gunnison, Colorado"
-                className="w-full rounded-2xl border border-amber-200 px-4 py-4 outline-none focus:ring-2 focus:ring-orange-300"
-              />
-              <button
-                type="submit"
-                disabled={!location.trim()}
-                className="mt-4 w-full rounded-full bg-orange-600 px-5 py-3 font-bold text-white disabled:bg-orange-300"
-              >
-                Find helpful stops →
-              </button>
-            </form>
-
-            <div className="mt-6">
-              <p className="text-xs font-bold tracking-[0.14em] text-slate-500">
-                TRY A ROMI TEST AREA
-              </p>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {suggestedAreas.map((area) => (
-                  <button
-                    key={area}
-                    type="button"
-                    onClick={() => chooseSuggestedArea(area)}
-                    className="rounded-full bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700"
-                  >
-                    {area}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-        </section>
-        <Nav />
-      </main>
-    );
-  }
+  const picked = selectedCard();
 
   return (
     <main className="min-h-screen bg-amber-50 px-5 py-8 pb-28 text-slate-800">
       <section className="mx-auto max-w-md">
-        <header>
-          <p className="text-sm font-bold tracking-[0.22em] text-teal-700">
-            ROMI
-          </p>
-          <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">
-            The Travel Companion
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Road-life Operations, Mapping &amp; Insights
-          </p>
-        </header>
+        <p className="text-sm font-bold tracking-[0.22em] text-teal-700">ROMI</p>
+        <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">
+          {viewingSavedDay ? viewingSavedDay.name : "Find the next stop"}
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          One screen: where you are, what you need, a map, then the card.
+        </p>
 
-        <section className="mt-7 rounded-3xl bg-teal-700 p-6 text-white shadow-lg">
-          <p className="text-xs font-bold tracking-[0.18em] text-teal-100">
-            TODAY
-          </p>
-          <h2 className="mt-2 text-3xl font-black">
-            What do you need today?
-          </h2>
-          <p className="mt-3 text-teal-50">
-            Pick one thing—or build a whole little road-day mission.
-          </p>
-        </section>
-
-        {renderLookup()}
-
-        <section className="mt-8">
-          <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-            FIND WHAT HELPS
-          </p>
-          <h3 className="mt-1 text-2xl font-black text-slate-900">
-            Pick your road-life needs
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Choose as many as you need. Tap one again to remove it.
-          </p>
-
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {needs.map((need) => {
-              const chosen = selectedNeeds.includes(need.label);
-
-              return (
-                <button
-                  key={need.label}
-                  type="button"
-                  onClick={() => toggleNeed(need.label)}
-                  className={`rounded-2xl p-4 text-left shadow-sm ring-1 ${
-                    chosen
-                      ? "bg-orange-500 text-white ring-orange-500"
-                      : "bg-white text-slate-800 ring-amber-100"
-                  }`}
-                >
-                  <span className="text-3xl">{need.icon}</span>
-                  <span className="mt-3 block font-bold">{need.label}</span>
-                  <span
-                    className={`mt-1 block text-xs ${
-                      chosen ? "text-orange-50" : "text-slate-500"
-                    }`}
-                  >
-                    {need.detail}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="mt-8 rounded-3xl border border-orange-200 bg-orange-50 p-5">
-          {selectedNeeds.length > 0 ? (
-            <>
-              <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-                YOUR ROAD-DAY MISSION
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-slate-900">
-                {selectedNeeds.length} thing
-                {selectedNeeds.length === 1 ? "" : "s"} to handle
-              </h3>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {selectedNeeds.map((need) => (
-                  <span
-                    key={need}
-                    className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-orange-700"
-                  >
-                    {need}
-                  </span>
-                ))}
-              </div>
-
+        {!viewingSavedDay && (
+          <form onSubmit={geocodeDraft} className="mt-6 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">WHERE</p>
+            <div className="mt-2 flex gap-2">
+              <input
+                value={locationDraft}
+                onChange={(e) => setLocationDraft(e.target.value)}
+                placeholder="City, campground, or address"
+                className="min-w-0 flex-1 rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+              />
+              <button type="submit" className="rounded-2xl bg-teal-700 px-4 font-bold text-white">
+                Go
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setScreen("plan")}
-                className="mt-5 w-full rounded-full bg-orange-600 px-5 py-3 font-bold text-white"
+                onClick={useMyLocation}
+                className="rounded-full bg-orange-50 px-3 py-2 text-sm font-bold text-orange-700"
               >
-                Build my quick plan →
+                Use my location
               </button>
-            </>
-          ) : (
-            <>
-              <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-                ROMI IS READY
+              {["Paonia, Colorado", "Gunnison, Colorado", "Colorado Springs, Colorado"].map((area) => (
+                <button
+                  key={area}
+                  type="button"
+                  onClick={() => {
+                    setLocationDraft(area);
+                    void (async () => {
+                      const res = await fetch(`/api/geocode?q=${encodeURIComponent(area)}`);
+                      const data = await res.json();
+                      if (data.lat) applyOrigin(data.label || area, data.lat, data.lng);
+                    })();
+                  }}
+                  className="rounded-full bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700"
+                >
+                  {area.split(",")[0]}
+                </button>
+              ))}
+            </div>
+            {geoStatus ? <p className="mt-2 text-sm text-slate-500">{geoStatus}</p> : null}
+            {origin ? (
+              <p className="mt-2 text-sm font-semibold text-teal-800">
+                Searching within {radiusMiles} miles of {origin.label.split(",")[0]}
               </p>
-              <h3 className="mt-2 text-2xl font-black text-slate-900">
-                Your road buddy, not just another map
-              </h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Tell ROMI what you need, and it will help build a practical next stop.
-              </p>
-            </>
-          )}
+            ) : null}
+          </form>
+        )}
+
+        {!viewingSavedDay && (
+          <section className="mt-5">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">FILTERS</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {needs.map((need) => {
+                const on = selectedNeeds.includes(need.label);
+                return (
+                  <button
+                    key={need.label}
+                    type="button"
+                    onClick={() => toggleNeed(need.label)}
+                    className={`rounded-full px-3 py-2 text-sm font-bold ${
+                      on ? "bg-orange-500 text-white" : "bg-white text-slate-700 ring-1 ring-amber-100"
+                    }`}
+                  >
+                    {need.icon} {need.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {!viewingSavedDay && origin && (
+          <section className="relative mt-5">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">SEARCH THIS AREA</p>
+            <input
+              value={placeSearch}
+              onChange={(e) => setPlaceSearch(e.target.value)}
+              placeholder="McD, Powerstop, Big B’s…"
+              className="mt-2 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+            />
+            {suggestions.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => pickSuggestion(s.id, s.name)}
+                    className="block w-full border-b border-amber-50 px-4 py-3 text-left last:border-0"
+                  >
+                    <p className="font-bold text-slate-900">{s.name}</p>
+                    <p className="text-xs text-slate-500">{s.area}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <div className="mt-5">
+          <RomiMap
+            compact
+            stops={mapStops()}
+            onSelect={(id) => {
+              setHighlightedId(id);
+              window.setTimeout(() => {
+                document.getElementById(`place-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }, 50);
+            }}
+          />
+        </div>
+
+        {picked ? <div className="mt-4">{renderCard(picked)}</div> : null}
+
+        <section className="mt-6 space-y-3">
+          <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
+            {nearbyStatus === "loading" ? "LOOKING AROUND…" : "IN THIS RADIUS"}
+          </p>
+          {allCards()
+            .filter((c) => c.id !== picked?.id)
+            .map((c) => renderCard(c))}
+          {origin && allCards().length === 0 && nearbyStatus !== "loading" ? (
+            <p className="rounded-3xl bg-white p-5 text-sm text-slate-600">
+              Nothing matched those filters in this radius. Clear a filter or move the location.
+            </p>
+          ) : null}
         </section>
+
+        {origin && !viewingSavedDay && (
+          <section className="mt-8 rounded-3xl border border-orange-200 bg-orange-50 p-5">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">SAVE THIS DAY</p>
+            <input
+              value={dayName}
+              onChange={(e) => setDayName(e.target.value)}
+              placeholder={`${origin.label.split(",")[0]} day`}
+              className="mt-3 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3"
+            />
+            <button
+              type="button"
+              onClick={saveThisDay}
+              className="mt-3 w-full rounded-full bg-orange-600 py-3 font-bold text-white"
+            >
+              Save this plan
+            </button>
+          </section>
+        )}
       </section>
       <Nav />
     </main>

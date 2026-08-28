@@ -219,6 +219,7 @@ type NearbyPlace = {
   note?: string;
   website?: string;
   hours?: string;
+  hoursFull?: string;
   rating?: number;
   reviewCount?: number;
   reviewSnippet?: string;
@@ -277,6 +278,7 @@ export default function Home() {
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
   const [searchPlaces, setSearchPlaces] = useState<NearbyPlace[]>([]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nearbyStatus, setNearbyStatus] = useState<"idle" | "loading" | "ready">("idle");
   const [geoStatus, setGeoStatus] = useState("");
 
@@ -475,6 +477,7 @@ export default function Home() {
     setLocationDraft(label);
     setViewingSavedDay(null);
     setHighlightedId(null);
+    setExpandedId(null);
   }
 
   async function geocodeDraft(event?: FormEvent) {
@@ -521,6 +524,7 @@ export default function Home() {
         return [data.place, ...next];
       });
       setHighlightedId(data.place.id);
+      setExpandedId(data.place.id);
     }
   }
 
@@ -623,17 +627,26 @@ export default function Home() {
     description?: string;
     note?: string;
     rating?: number;
+    reviewCount?: number;
+    reviewSnippet?: string;
     website?: string;
+    hours?: string;
+    hoursFull?: string;
     status?: "verified" | "google";
   }) {
     const status = place.status || "verified";
     const matches = matchingNeeds(place.helpsWith || []);
     const saved = savedPlaceIds.includes(place.id);
+    const open = expandedId === place.id;
     return (
       <article
         key={place.id}
         id={`place-${place.id}`}
-        className={`rounded-3xl bg-white p-4 shadow-sm ring-1 ${
+        onClick={() => {
+          setHighlightedId(place.id);
+          setExpandedId(open ? null : place.id);
+        }}
+        className={`cursor-pointer rounded-3xl bg-white p-4 shadow-sm ring-1 ${
           highlightedId === place.id ? "ring-2 ring-orange-500" : "ring-amber-100"
         }`}
       >
@@ -647,9 +660,13 @@ export default function Home() {
             <p className="text-xs font-semibold text-slate-500">📍 {place.area}</p>
           </div>
         </div>
-        {place.rating ? (
-          <p className="mt-2 text-sm font-bold text-teal-800">★ {place.rating}</p>
-        ) : null}
+        {(place.rating || place.hours) && (
+          <p className="mt-2 text-sm font-bold text-teal-800">
+            {place.rating ? `★ ${place.rating}${place.reviewCount ? ` (${place.reviewCount})` : ""}` : ""}
+            {place.rating && place.hours ? " · " : ""}
+            {place.hours ? `🕒 ${place.hours}` : ""}
+          </p>
+        )}
         {place.helpsWith && place.helpsWith.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {place.helpsWith.map((need) => (
@@ -665,20 +682,47 @@ export default function Home() {
           </div>
         )}
         {place.description ? (
-          <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">{place.description}</p>
+          <p className={`mt-3 text-sm leading-6 text-slate-600 ${open ? "" : "line-clamp-3"}`}>
+            {place.description}
+          </p>
         ) : null}
-        {place.note ? (
-          <p className="mt-2 line-clamp-2 text-sm font-semibold text-teal-800">🧭 {place.note}</p>
+        {status === "verified" && place.note ? (
+          <p className={`mt-2 text-sm font-semibold text-teal-800 ${open ? "" : "line-clamp-2"}`}>
+            🧭 {place.note}
+          </p>
         ) : null}
+        {open && place.reviewSnippet ? (
+          <p className="mt-3 rounded-2xl bg-amber-50 p-3 text-sm leading-6 text-slate-700">
+            “{place.reviewSnippet}”
+          </p>
+        ) : null}
+        {open && place.hoursFull ? (
+          <p className="mt-3 whitespace-pre-line text-sm text-slate-600">{place.hoursFull}</p>
+        ) : null}
+        {open && place.website ? (
+          <a
+            href={place.website}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => event.stopPropagation()}
+            className="mt-3 block text-sm font-bold text-teal-700"
+          >
+            Website →
+          </a>
+        ) : null}
+        <p className="mt-3 text-sm font-bold text-orange-700">
+          {open ? "Show less" : "Read more"}
+        </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
           {status === "verified" ? (
             <button
               type="button"
-              onClick={() =>
+              onClick={(event) => {
+                event.stopPropagation();
                 setSavedPlaceIds((cur) =>
                   cur.includes(place.id) ? cur.filter((id) => id !== place.id) : [...cur, place.id],
-                )
-              }
+                );
+              }}
               className={`rounded-full px-4 py-3 text-sm font-bold ${
                 saved ? "border border-teal-700 bg-white text-teal-700" : "bg-orange-600 text-white"
               }`}
@@ -688,7 +732,10 @@ export default function Home() {
           ) : (
             <button
               type="button"
-              onClick={() => startPlaceReport({ name: place.name, area: place.area })}
+              onClick={(event) => {
+                event.stopPropagation();
+                startPlaceReport({ name: place.name, area: place.area });
+              }}
               className="rounded-full bg-orange-600 px-4 py-3 text-sm font-bold text-white"
             >
               Scout it
@@ -698,6 +745,7 @@ export default function Home() {
             href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`}
             target="_blank"
             rel="noreferrer"
+            onClick={(event) => event.stopPropagation()}
             className="rounded-full border border-teal-700 px-4 py-3 text-center text-sm font-bold text-teal-700"
           >
             Maps
@@ -903,6 +951,7 @@ export default function Home() {
             stops={mapStops()}
             onSelect={(id) => {
               setHighlightedId(id);
+              setExpandedId(id);
               window.setTimeout(() => {
                 document.getElementById(`place-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
               }, 50);

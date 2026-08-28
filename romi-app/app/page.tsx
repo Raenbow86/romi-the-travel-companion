@@ -274,6 +274,9 @@ export default function Home() {
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [locationDraft, setLocationDraft] = useState("");
   const [placeSearch, setPlaceSearch] = useState("");
+  const [briefDraft, setBriefDraft] = useState("");
+  const [refinements, setRefinements] = useState<string[]>([]);
+  const [romiReply, setRomiReply] = useState("");
   const [suggestions, setSuggestions] = useState<Array<{ id: string; name: string; area: string }>>([]);
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
   const [searchPlaces, setSearchPlaces] = useState<NearbyPlace[]>([]);
@@ -370,6 +373,7 @@ export default function Home() {
       radius: String(radiusMeters),
       exclude: realStops.map((s) => s.name).join("|"),
     });
+    if (refinements.length) params.set("extra", refinements.join(" "));
     fetch(`/api/nearby?${params.toString()}`)
       .then((r) => r.json())
       .then((data: { places?: NearbyPlace[] }) => {
@@ -387,7 +391,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [origin, selectedNeeds]);
+  }, [origin, selectedNeeds, refinements]);
 
   useEffect(() => {
     if (!origin || placeSearch.trim().length < 2) {
@@ -448,6 +452,13 @@ export default function Home() {
       .filter((place) => {
         if (selectedNeeds.length === 0 || !place.helpsWith?.length) return true;
         return place.helpsWith.some((need) => selectedNeeds.includes(need));
+      })
+      .sort((a, b) => {
+        const blob = (place: NearbyPlace) =>
+          `${place.name} ${place.description || ""} ${place.area}`.toLowerCase();
+        const score = (place: NearbyPlace) =>
+          refinements.filter((item) => blob(place).includes(item.toLowerCase())).length;
+        return score(b) - score(a);
       })
       .slice(0, 8);
   }
@@ -541,6 +552,44 @@ export default function Home() {
     setSelectedNeeds((current) =>
       current.includes(label) ? current.filter((n) => n !== label) : [...current, label],
     );
+  }
+
+  function addRefinement(text: string) {
+    const chip = text.trim().replace(/\s+/g, " ");
+    if (!chip) return;
+    setRefinements((current) =>
+      current.some((item) => item.toLowerCase() === chip.toLowerCase())
+        ? current
+        : [...current, chip],
+    );
+  }
+
+  function talkToRomi(event?: FormEvent) {
+    event?.preventDefault();
+    const text = briefDraft.trim();
+    if (!text) return;
+    const lower = text.toLowerCase();
+    const synonyms: Array<{ need: string; words: string[] }> = [
+      { need: "Adult-friendly", words: ["adult", "drink", "bar", "beer", "wine", "brewery", "winery", "cocktail", "liquor", "golf cart"] },
+      { need: "Adventure", words: ["adventure", "hike", "trail", "fish", "atv", "jeep", "raft", "hot spring"] },
+      { need: "Food", words: ["food", "eat", "dinner", "lunch", "breakfast", "hungry"] },
+      { need: "Fuel", words: ["fuel", "gas", "diesel"] },
+      { need: "Sleep", words: ["sleep", "camp", "stay", "overnight"] },
+      { need: "Shower", words: ["shower"] },
+      { need: "Dog Needs", words: ["dog", "pup"] },
+    ];
+    const found = synonyms.filter((row) => row.words.some((word) => lower.includes(word))).map((row) => row.need);
+    if (found.length) {
+      setSelectedNeeds((current) => [...new Set([...current, ...found])]);
+    }
+    addRefinement(text);
+    const where = origin?.label.split(",")[0] || "this area";
+    setRomiReply(
+      `Got it — ${found.length ? found.join(" + ") : "that"} around ${where}${
+        /golf cart/i.test(text) ? ", leaning golf-cart fun" : ""
+      }. Keep talking and I’ll tighten the pins.`,
+    );
+    setBriefDraft("");
   }
 
   function startPlaceReport(prefill?: { name?: string; area?: string }) {
@@ -953,6 +1002,44 @@ export default function Home() {
           </form>
         )}
 
+        {!viewingSavedDay && origin && (
+          <form onSubmit={talkToRomi} className="mt-5 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">TELL ROMI</p>
+            <h3 className="mt-1 text-xl font-black text-slate-900">Get more specific</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Talk like you would to a friend. “Adventure and adult-friendly, but golf carts.”
+            </p>
+            <textarea
+              value={briefDraft}
+              onChange={(event) => setBriefDraft(event.target.value)}
+              placeholder="I want adventure and drinks, like golf-cart bars…"
+              className="mt-3 h-24 w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+            />
+            <button type="submit" className="mt-3 w-full rounded-full bg-teal-700 py-3 font-bold text-white">
+              Tell Romi
+            </button>
+            {romiReply ? (
+              <p className="mt-3 rounded-2xl bg-teal-50 p-3 text-sm font-semibold text-teal-900">
+                {romiReply}
+              </p>
+            ) : null}
+            {refinements.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {refinements.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setRefinements((current) => current.filter((r) => r !== item))}
+                    className="rounded-full bg-orange-100 px-3 py-1 text-sm font-bold text-orange-800"
+                  >
+                    {item} ×
+                  </button>
+                ))}
+              </div>
+            )}
+          </form>
+        )}
+
         {!viewingSavedDay && (
           <section className="mt-5">
             <p className="text-xs font-bold tracking-[0.16em] text-orange-700">FILTERS</p>
@@ -973,6 +1060,43 @@ export default function Home() {
                 );
               })}
             </div>
+            {selectedNeeds.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(
+                  [
+                    selectedNeeds.includes("Adult-friendly")
+                      ? ["Golf carts", "Brewery", "Winery", "Cocktails", "Patio"]
+                      : [],
+                    selectedNeeds.includes("Adventure")
+                      ? ["Hike", "Fish", "View", "Hot springs", "ATV"]
+                      : [],
+                    selectedNeeds.includes("Food") ? ["Groceries", "Sit-down", "Coffee"] : [],
+                  ] as string[][]
+                )
+                  .flat()
+                  .map((detail) => {
+                    const on = refinements.some((item) => item.toLowerCase() === detail.toLowerCase());
+                    return (
+                      <button
+                        key={detail}
+                        type="button"
+                        onClick={() =>
+                          on
+                            ? setRefinements((current) =>
+                                current.filter((item) => item.toLowerCase() !== detail.toLowerCase()),
+                              )
+                            : addRefinement(detail)
+                        }
+                        className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                          on ? "bg-teal-700 text-white" : "bg-teal-50 text-teal-800"
+                        }`}
+                      >
+                        {detail}
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
           </section>
         )}
 

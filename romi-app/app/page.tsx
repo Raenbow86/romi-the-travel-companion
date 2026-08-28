@@ -278,6 +278,7 @@ export default function Home() {
   const [refinements, setRefinements] = useState<string[]>([]);
   const [romiReply, setRomiReply] = useState("");
   const [suggestions, setSuggestions] = useState<Array<{ id: string; name: string; area: string }>>([]);
+  const [areaSuggestions, setAreaSuggestions] = useState<Array<{ id: string; name: string; area: string }>>([]);
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
   const [searchPlaces, setSearchPlaces] = useState<NearbyPlace[]>([]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -421,6 +422,23 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [placeSearch, origin]);
 
+  useEffect(() => {
+    const q = locationDraft.trim();
+    if (q.length < 2 || (origin && q === origin.label)) {
+      setAreaSuggestions([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      fetch(`/api/autocomplete?q=${encodeURIComponent(q)}&types=${encodeURIComponent("(cities)")}`)
+        .then((r) => r.json())
+        .then((data: { predictions?: Array<{ id: string; name: string; area: string }> }) => {
+          setAreaSuggestions(data.predictions || []);
+        })
+        .catch(() => setAreaSuggestions([]));
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [locationDraft, origin]);
+
   function matchingNeeds(placeNeeds: string[]) {
     return selectedNeeds.filter((need) => placeNeeds.includes(need));
   }
@@ -545,6 +563,18 @@ export default function Home() {
       });
       setHighlightedId(data.place.id);
       setExpandedId(data.place.id);
+    }
+  }
+
+  async function pickArea(id: string, name: string, area: string) {
+    setAreaSuggestions([]);
+    const res = await fetch(`/api/place?id=${encodeURIComponent(id)}`);
+    const data = await res.json();
+    if (data.place?.lat) {
+      await applyOrigin(data.place.area || `${name}, ${area}`, data.place.lat, data.place.lng);
+    } else {
+      setLocationDraft(`${name} ${area}`.trim());
+      await geocodeDraft();
     }
   }
 
@@ -956,16 +986,34 @@ export default function Home() {
         {!viewingSavedDay && (
           <form onSubmit={geocodeDraft} className="mt-6 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
             <p className="text-xs font-bold tracking-[0.16em] text-orange-700">WHERE</p>
-            <div className="mt-2 flex gap-2">
+            <p className="mt-1 text-sm text-slate-600">
+              Any town or ZIP. Same tools everywhere — not just our test towns.
+            </p>
+            <div className="relative mt-2 flex gap-2">
               <input
                 value={locationDraft}
                 onChange={(e) => setLocationDraft(e.target.value)}
-                placeholder="City, campground, or address"
+                placeholder="City or ZIP — Salida 81201, Moab, 81601…"
                 className="min-w-0 flex-1 rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
               />
               <button type="submit" className="rounded-2xl bg-teal-700 px-4 font-bold text-white">
                 Go
               </button>
+              {areaSuggestions.length > 0 && (
+                <div className="absolute left-0 right-16 top-14 z-10 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+                  {areaSuggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => pickArea(s.id, s.name, s.area)}
+                      className="block w-full border-b border-amber-50 px-4 py-3 text-left last:border-0"
+                    >
+                      <p className="font-bold text-slate-900">{s.name}</p>
+                      <p className="text-xs text-slate-500">{s.area}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <button

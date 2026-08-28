@@ -49,7 +49,15 @@ export async function GET(request: NextRequest) {
         if (types.includes("lodging") || types.includes("campground")) icon = "🛏️";
         else if (types.includes("restaurant") || types.includes("cafe") || types.includes("bakery")) icon = "🍎";
         else if (types.includes("gas_station")) icon = "⛽";
-        else if (types.some((t) => t.includes("wine") || t === "liquor_store")) icon = "🍷";
+        else if (
+          types.some(
+            (t) =>
+              ["liquor_store", "bar", "night_club"].includes(t) ||
+              t.includes("wine") ||
+              t.includes("brew"),
+          )
+        )
+          icon = "🍷";
         else if (types.includes("park")) icon = "🏞️";
         return {
           id: r.place_id || `search-${r.name}`,

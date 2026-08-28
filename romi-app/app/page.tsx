@@ -299,9 +299,8 @@ export default function Home() {
   const [reportNeeds, setReportNeeds] = useState<string[]>([]);
   const [reportNotes, setReportNotes] = useState("");
   const [returnAgain, setReturnAgain] = useState("");
-
-  const radiusMiles = 20;
-  const radiusMeters = 32000;
+  const [radiusMiles, setRadiusMiles] = useState(15);
+  const radiusMeters = Math.round(radiusMiles * 1609);
 
   useEffect(() => {
     try {
@@ -391,7 +390,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [origin, selectedNeeds, refinements]);
+  }, [origin, selectedNeeds, refinements, radiusMiles]);
 
   useEffect(() => {
     if (!origin || placeSearch.trim().length < 2) {
@@ -975,7 +974,7 @@ export default function Home() {
               >
                 Use my location
               </button>
-              {["Paonia, Colorado", "Gunnison, Colorado", "Colorado Springs, Colorado"].map((area) => (
+              {["Paonia, Colorado", "Gunnison, Colorado", "Salida, CO 81201", "Colorado Springs, Colorado"].map((area) => (
                 <button
                   key={area}
                   type="button"
@@ -995,9 +994,25 @@ export default function Home() {
             </div>
             {geoStatus ? <p className="mt-2 text-sm text-slate-500">{geoStatus}</p> : null}
             {origin ? (
-              <p className="mt-2 text-sm font-semibold text-teal-800">
-                Searching within {radiusMiles} miles of {origin.label.split(",")[0]}
-              </p>
+              <div className="mt-3">
+                <p className="text-sm font-semibold text-teal-800">
+                  Within {radiusMiles} miles of {origin.label.split(",")[0]}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  {[10, 15, 20].map((miles) => (
+                    <button
+                      key={miles}
+                      type="button"
+                      onClick={() => setRadiusMiles(miles)}
+                      className={`rounded-full px-3 py-1 text-sm font-bold ${
+                        radiusMiles === miles ? "bg-teal-700 text-white" : "bg-teal-50 text-teal-800"
+                      }`}
+                    >
+                      {miles} mi
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : null}
           </form>
         )}
@@ -1070,7 +1085,9 @@ export default function Home() {
                     selectedNeeds.includes("Adventure")
                       ? ["Hike", "Fish", "View", "Hot springs", "ATV"]
                       : [],
-                    selectedNeeds.includes("Food") ? ["Groceries", "Sit-down", "Coffee"] : [],
+                    selectedNeeds.includes("Dog Needs")
+                      ? ["Dog park", "Vet", "Supplies", "Pet-friendly patio", "Off-leash"]
+                      : [],
                   ] as string[][]
                 )
                   .flat()

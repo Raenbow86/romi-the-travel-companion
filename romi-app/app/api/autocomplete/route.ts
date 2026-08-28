@@ -6,13 +6,14 @@ export async function GET(request: NextRequest) {
   const lat = request.nextUrl.searchParams.get("lat");
   const lng = request.nextUrl.searchParams.get("lng");
   const radius = request.nextUrl.searchParams.get("radius") || "32000";
+  const types = request.nextUrl.searchParams.get("types") || "establishment";
   if (!key || q.length < 2) return NextResponse.json({ predictions: [] });
 
   const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
   url.searchParams.set("input", q);
   url.searchParams.set("key", key);
-  url.searchParams.set("types", "establishment");
-  if (lat && lng) {
+  url.searchParams.set("types", types);
+  if (lat && lng && types === "establishment") {
     url.searchParams.set("location", `${lat},${lng}`);
     url.searchParams.set("radius", radius);
     url.searchParams.set("strictbounds", "true");

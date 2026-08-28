@@ -9,6 +9,7 @@ export type MapStop = {
   icon: string;
   lat: number;
   lng: number;
+  kind?: "verified" | "google";
 };
 
 function loadLeaflet(): Promise<void> {
@@ -42,6 +43,11 @@ function loadLeaflet(): Promise<void> {
           line-height: 1;
           box-shadow: 0 4px 12px rgba(15, 23, 42, 0.28);
         }
+        .romi-pin-face.google {
+          border-color: #ea580c;
+          border-style: dashed;
+          background: #fff;
+        }
       `;
       document.head.appendChild(style);
     }
@@ -58,16 +64,18 @@ function loadLeaflet(): Promise<void> {
 export function RomiMap({
   stops,
   onSelect,
+  compact = false,
 }: {
   stops: MapStop[];
   onSelect: (id: string) => void;
+  compact?: boolean;
 }) {
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ remove: () => void } | null>(null);
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
 
-  const key = stops.map((s) => `${s.id}:${s.icon}`).join("|");
+  const key = stops.map((s) => `${s.id}:${s.icon}:${s.kind || ""}`).join("|");
 
   useEffect(() => {
     let cancelled = false;
@@ -91,22 +99,20 @@ export function RomiMap({
       const points = stops.map((stop) => {
         const picture = L.divIcon({
           className: "romi-pin",
-          html: `<div class="romi-pin-face">${stop.icon}</div>`,
+          html: `<div class="romi-pin-face ${stop.kind === "google" ? "google" : ""}">${stop.icon}</div>`,
           iconSize: [44, 44],
           iconAnchor: [22, 22],
           popupAnchor: [0, -22],
         });
 
         const marker = L.marker([stop.lat, stop.lng], { icon: picture }).addTo(map);
-        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`;
-        marker.bindPopup(
-          `<strong>${stop.name}</strong><br/>${stop.area}<br/><a href="${mapsUrl}" target="_blank" rel="noreferrer">Open in Maps</a>`,
-        );
-        marker.on("click", () => selectRef.current(stop.id));
+        marker.on("click", () => {
+          selectRef.current(stop.id);
+        });
         return [stop.lat, stop.lng] as [number, number];
       });
 
-      map.fitBounds(L.latLngBounds(points), { padding: [36, 36], maxZoom: 12 });
+      map.fitBounds(L.latLngBounds(points), { padding: [36, 36], maxZoom: 13 });
       mapRef.current = map;
       setTimeout(() => map.invalidateSize(), 80);
     }
@@ -123,19 +129,30 @@ export function RomiMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  if (stops.length === 0) return null;
+  if (stops.length === 0) {
+    return (
+      <section className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-amber-100">
+        <div className="flex h-64 items-center justify-center px-5 text-center text-sm text-slate-500">
+          Set a location to see pins around you.
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section className="mt-8 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-amber-100">
-      <p className="px-5 pt-4 text-xs font-bold tracking-[0.16em] text-orange-700">
-        MAP
-      </p>
-      <h3 className="px-5 text-2xl font-black text-slate-900">Tap a picture</h3>
-      <p className="px-5 pb-3 text-sm text-slate-600">
-        Each pin is the thing itself — bread, wine, tent, burger. Tap it for the
-        card, or Open in Maps for directions.
-      </p>
-      <div ref={el} className="h-72 w-full" />
+    <section className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-amber-100">
+      {!compact ? (
+        <>
+          <p className="px-5 pt-4 text-xs font-bold tracking-[0.16em] text-orange-700">
+            MAP
+          </p>
+          <h3 className="px-5 text-xl font-black text-slate-900">Tap a pin for the card</h3>
+          <p className="px-5 pb-3 text-sm text-slate-600">
+            Teal solid = scout verified. Orange dashed = Google lead.
+          </p>
+        </>
+      ) : null}
+      <div ref={el} className={compact ? "h-80 w-full" : "h-72 w-full"} />
     </section>
   );
 }
@@ -159,6 +176,5 @@ type LeafletLike = {
 };
 
 type LeafletMarker = {
-  bindPopup: (html: string) => void;
-  on: (event: string, fn: () => void) => void;
+  on: (ev: string, fn: () => void) => void;
 };

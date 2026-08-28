@@ -26,10 +26,21 @@ const realStops = [
     id: "lodgepole-campground",
     icon: "🏕️",
     name: "Lodgepole Campground",
+    area: "near Almont / Gunnison, Colorado",
     description:
-      "National Forest campground near Almont and Gunnison, Colorado. A first real ROMI place: overnight, water access, dogs on leash, and nearby adventure.",
+      "National Forest campground near Almont and Gunnison, Colorado. Overnight, water access, dogs on leash, and nearby adventure.",
     helpsWith: ["Sleep", "Water", "Adventure", "Dog Needs"],
     note: "Confirm current season, water, and fees before you go. Dogs are typically OK on a leash.",
+  },
+  {
+    id: "three-rivers-resort",
+    icon: "🛒",
+    name: "Three Rivers Resort",
+    area: "Almont, Colorado",
+    description:
+      "On the Taylor River in Almont: general store, Smokehouse restaurant, cabins, and a practical stop between Gunnison and Lodgepole.",
+    helpsWith: ["Food", "Sleep", "Adventure"],
+    note: "Store hours are often 7am–9pm. Confirm the Smokehouse and cabin availability before you count on them.",
   },
 ];
 
@@ -528,7 +539,7 @@ export default function Home() {
                         {stop.name}
                       </h4>
                       <p className="mt-1 text-sm font-semibold text-slate-500">
-                        📍 near Almont / Gunnison, Colorado
+                        📍 {stop.area}
                       </p>
                     </article>
                   ))}
@@ -544,8 +555,8 @@ export default function Home() {
               Places that could help together
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              First real stop in ROMI: Lodgepole Campground. More real places
-              come next — still inside this same screen.
+              Two real stops that work together: sleep at Lodgepole, resupply
+              at Three Rivers in Almont. Same screen. Same save.
             </p>
 
             <div className="mt-5 space-y-4">

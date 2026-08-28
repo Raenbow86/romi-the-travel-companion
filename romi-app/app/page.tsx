@@ -199,6 +199,14 @@ const realStops = [
 
 type Screen = "home" | "plan" | "results" | "report";
 
+type SavedDay = {
+  id: string;
+  name: string;
+  location: string;
+  needs: string[];
+  placeIds: string[];
+};
+
 type TravelerReport = {
   name: string;
   area: string;
@@ -219,7 +227,9 @@ export default function Home() {
   const [travelerReports, setTravelerReports] = useState<TravelerReport[]>([]);
   const [hasLoadedReports, setHasLoadedReports] = useState(false);
   const [savedPlaceIds, setSavedPlaceIds] = useState<string[]>([]);
+  const [savedDays, setSavedDays] = useState<SavedDay[]>([]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [dayName, setDayName] = useState("");
 
   const [reportName, setReportName] = useState("");
   const [reportArea, setReportArea] = useState("");
@@ -250,6 +260,14 @@ export default function Home() {
           setSavedPlaceIds(parsedPlaces);
         }
       }
+
+      const savedDayRaw = window.localStorage.getItem("romi-saved-days");
+      if (savedDayRaw) {
+        const parsedDays = JSON.parse(savedDayRaw);
+        if (Array.isArray(parsedDays)) {
+          setSavedDays(parsedDays);
+        }
+      }
     } catch {
       // ROMI will simply start with no reports if storage is unavailable.
     } finally {
@@ -269,10 +287,14 @@ export default function Home() {
         "romi-saved-places",
         JSON.stringify(savedPlaceIds)
       );
+      window.localStorage.setItem(
+        "romi-saved-days",
+        JSON.stringify(savedDays)
+      );
     } catch {
       // Reports still work for this visit if device storage is unavailable.
     }
-  }, [travelerReports, savedPlaceIds, hasLoadedReports]);
+  }, [travelerReports, savedPlaceIds, savedDays, hasLoadedReports]);
 
   function toggleSavePlace(placeId: string) {
     setSavedPlaceIds((current) =>
@@ -327,16 +349,83 @@ export default function Home() {
     return realStops;
   }
 
+  function defaultDayName(currentLocation: string) {
+    const q = currentLocation.toLowerCase();
+    if (
+      q.includes("paonia") ||
+      q.includes("hotchkiss") ||
+      q.includes("cedaredge") ||
+      q.includes("north fork") ||
+      q.includes("wine")
+    ) {
+      return "Paonia wine day";
+    }
+    if (
+      q.includes("gunnison") ||
+      q.includes("almont") ||
+      q.includes("lodgepole")
+    ) {
+      return "Gunnison Weekend";
+    }
+    return currentLocation.trim() || "My road day";
+  }
+
+  function rankedStops(currentLocation: string) {
+    const stops = [...stopsForLocation(currentLocation)];
+    if (selectedNeeds.length === 0) return stops;
+    return stops.sort((a, b) => {
+      const am = matchingNeeds(a.helpsWith).length;
+      const bm = matchingNeeds(b.helpsWith).length;
+      return bm - am;
+    });
+  }
+
+  function saveThisDay() {
+    const name = dayName.trim() || defaultDayName(location);
+    const ranked = rankedStops(location);
+    const matchedIds = ranked
+      .filter((stop) => matchingNeeds(stop.helpsWith).length > 0)
+      .map((stop) => stop.id);
+    const placeIds =
+      matchedIds.length > 0 ? matchedIds : ranked.map((stop) => stop.id);
+
+    const day: SavedDay = {
+      id: `day-${Date.now()}`,
+      name,
+      location,
+      needs: selectedNeeds,
+      placeIds,
+    };
+
+    setSavedDays((current) => [
+      day,
+      ...current.filter(
+        (existing) =>
+          existing.name !== day.name || existing.location !== day.location
+      ),
+    ]);
+    setDayName(name);
+  }
+
+  function openDay(day: SavedDay) {
+    setLocation(day.location);
+    setSelectedNeeds(day.needs);
+    setDayName(day.name);
+    setScreen("results");
+  }
+
   function findHelpfulStops(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (location.trim()) {
+      setDayName((current) => current || defaultDayName(location));
       setScreen("results");
     }
   }
 
   function chooseSuggestedArea(area: string) {
     setLocation(area);
+    setDayName(defaultDayName(area));
     setScreen("results");
   }
 
@@ -751,9 +840,14 @@ export default function Home() {
             </p>
 
             <div className="mt-5 space-y-4">
-              {stopsForLocation(location).map((stop) => {
+              {rankedStops(location).map((stop, index, list) => {
                 const matches = matchingNeeds(stop.helpsWith);
                 const saved = savedPlaceIds.includes(stop.id);
+                const firstUnmatched =
+                  selectedNeeds.length > 0 &&
+                  matches.length === 0 &&
+                  (index === 0 ||
+                    matchingNeeds(list[index - 1].helpsWith).length > 0);
 
                 return (
                   <article
@@ -765,6 +859,11 @@ export default function Home() {
                         : "ring-amber-100"
                     }`}
                   >
+                    {firstUnmatched ? (
+                      <p className="mb-3 text-xs font-bold tracking-[0.16em] text-slate-500">
+                        ALSO IN THIS AREA
+                      </p>
+                    ) : null}
                     <div className="flex gap-3">
                       <span className="text-3xl">{stop.icon}</span>
                       <div>
@@ -825,6 +924,41 @@ export default function Home() {
                 );
               })}
             </div>
+          </section>
+
+          <section className="mt-8 rounded-3xl border border-orange-200 bg-orange-50 p-5">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
+              SAVE THIS DAY
+            </p>
+            <h3 className="mt-1 text-2xl font-black text-slate-900">
+              Keep this plan
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Reopen it later on this phone — needs, area, and matching stops.
+            </p>
+            <input
+              value={dayName}
+              onChange={(event) => setDayName(event.target.value)}
+              placeholder={defaultDayName(location)}
+              className="mt-4 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+            />
+            <button
+              type="button"
+              onClick={saveThisDay}
+              className="mt-3 w-full rounded-full bg-orange-600 px-5 py-3 font-bold text-white"
+            >
+              Save this day
+            </button>
+            {savedDays.some(
+              (day) =>
+                day.location === location &&
+                (day.name === dayName.trim() ||
+                  day.name === defaultDayName(location))
+            ) ? (
+              <p className="mt-3 text-center text-sm font-semibold text-teal-800">
+                Saved. You’ll see it on the home screen after refresh.
+              </p>
+            ) : null}
           </section>
 
           <button
@@ -978,6 +1112,33 @@ export default function Home() {
             })}
           </div>
         </section>
+
+        {savedDays.length > 0 && (
+          <section className="mt-8">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
+              SAVED DAYS
+            </p>
+            <h3 className="mt-1 text-2xl font-black text-slate-900">
+              Open a plan you kept
+            </h3>
+            <div className="mt-4 space-y-3">
+              {savedDays.map((day) => (
+                <button
+                  key={day.id}
+                  type="button"
+                  onClick={() => openDay(day)}
+                  className="w-full rounded-3xl bg-white p-5 text-left shadow-sm ring-1 ring-amber-100"
+                >
+                  <p className="text-lg font-black text-slate-900">{day.name}</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    📍 {day.location}
+                    {day.needs.length > 0 ? ` · ${day.needs.join(", ")}` : ""}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="mt-8 rounded-3xl border border-orange-200 bg-orange-50 p-5">
           {selectedNeeds.length > 0 ? (

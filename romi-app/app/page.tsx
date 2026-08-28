@@ -254,6 +254,19 @@ export default function Home() {
   const [showAlsoInArea, setShowAlsoInArea] = useState(false);
   const [viewingSavedDay, setViewingSavedDay] = useState<SavedDay | null>(null);
   const [placeSearch, setPlaceSearch] = useState("");
+  const [googleSearchHits, setGoogleSearchHits] = useState<
+    Array<{
+      id: string;
+      name: string;
+      area: string;
+      lat: number;
+      lng: number;
+      rating?: number;
+      reviewCount?: number;
+      icon: string;
+    }>
+  >([]);
+  const [searchStatus, setSearchStatus] = useState<"idle" | "loading" | "ready">("idle");
 
   const [reportName, setReportName] = useState("");
   const [reportArea, setReportArea] = useState("");
@@ -357,6 +370,31 @@ export default function Home() {
       cancelled = true;
     };
   }, [screen, location, selectedNeeds]);
+
+  useEffect(() => {
+    const q = placeSearch.trim();
+    if (q.length < 3) {
+      setGoogleSearchHits([]);
+      setSearchStatus("idle");
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSearchStatus("loading");
+      fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        .then((response) => response.json())
+        .then((data: { places?: typeof googleSearchHits }) => {
+          setGoogleSearchHits(data.places || []);
+          setSearchStatus("ready");
+        })
+        .catch(() => {
+          setGoogleSearchHits([]);
+          setSearchStatus("ready");
+        });
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [placeSearch]);
 
   function toggleSavePlace(placeId: string) {
     setSavedPlaceIds((current) =>
@@ -516,46 +554,190 @@ export default function Home() {
 
   function placeLookups() {
     const q = compactName(placeSearch);
-    if (q.length < 2) return [];
+    if (placeSearch.trim().length < 2) return [];
     const hits: Array<{
+      id: string;
       name: string;
       area: string;
-      status: "verified" | "your-scout" | "unknown";
+      status: "verified" | "your-scout" | "google";
       detail: string;
+      lat?: number;
+      lng?: number;
+      icon: string;
+      rating?: number;
     }> = [];
+
     for (const stop of realStops) {
-      if (compactName(stop.name).includes(q) || compactName(stop.area).includes(q)) {
+      if (q && (compactName(stop.name).includes(q) || compactName(stop.area).includes(q))) {
         hits.push({
+          id: stop.id,
           name: stop.name,
           area: stop.area,
           status: "verified",
           detail: `Scout verified · ${stop.helpsWith.join(" · ")}`,
+          lat: stop.lat,
+          lng: stop.lng,
+          icon: stop.icon,
         });
       }
     }
+
     for (const report of travelerReports) {
       if (
-        compactName(report.name).includes(q) ||
-        compactName(report.area).includes(q)
+        q &&
+        (compactName(report.name).includes(q) || compactName(report.area).includes(q))
       ) {
         if (hits.some((hit) => isSamePlace(hit.name, report.name))) continue;
         hits.push({
+          id: `report-${report.name}`,
           name: report.name,
           area: report.area,
           status: "your-scout",
           detail: "Your scout report · not community-verified yet",
+          icon: "🧭",
         });
       }
     }
-    if (hits.length === 0) {
+
+    for (const place of googleSearchHits) {
+      const verified = realStops.find((stop) => isSamePlace(stop.name, place.name));
+      if (verified) {
+        if (!hits.some((hit) => hit.id === verified.id)) {
+          hits.unshift({
+            id: verified.id,
+            name: verified.name,
+            area: verified.area,
+            status: "verified",
+            detail: `Scout verified · ${verified.helpsWith.join(" · ")}`,
+            lat: verified.lat,
+            lng: verified.lng,
+            icon: verified.icon,
+            rating: place.rating,
+          });
+        }
+        continue;
+      }
+      if (hits.some((hit) => isSamePlace(hit.name, place.name))) continue;
       hits.push({
-        name: placeSearch.trim(),
-        area: location || "Unknown area",
-        status: "unknown",
-        detail: "Not in ROMI yet. Scout it if you’ve been.",
+        id: place.id,
+        name: place.name,
+        area: place.area,
+        status: "google",
+        detail: place.rating
+          ? `Google listing · ★ ${place.rating} · Needs a scout`
+          : "Google listing · Needs a scout",
+        lat: place.lat,
+        lng: place.lng,
+        icon: place.icon,
+        rating: place.rating,
       });
     }
-    return hits.slice(0, 6);
+
+    return hits.slice(0, 8);
+  }
+
+  function lookupMapStops() {
+    return placeLookups()
+      .filter((hit) => typeof hit.lat === "number" && typeof hit.lng === "number")
+      .map((hit) => ({
+        id: hit.id,
+        name: hit.name,
+        area: hit.area,
+        icon: hit.icon,
+        lat: hit.lat as number,
+        lng: hit.lng as number,
+      }));
+  }
+
+  function LookupPanel() {
+    const hits = placeLookups();
+    const pins = lookupMapStops();
+    return (
+      <section className="mt-8 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100">
+        <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
+          LOOK UP A PLACE
+        </p>
+        <h3 className="mt-1 text-2xl font-black text-slate-900">
+          Search Google + ROMI
+        </h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Type a real name. We’ll show if it’s scout-verified, your report, or
+          only a Google lead — on the same map.
+        </p>
+        <input
+          value={placeSearch}
+          onChange={(event) => setPlaceSearch(event.target.value)}
+          placeholder="Gaylord Hotel, Big B’s, Powerstop…"
+          className="mt-4 w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+        />
+        {searchStatus === "loading" ? (
+          <p className="mt-3 text-sm font-semibold text-slate-500">
+            Searching Google…
+          </p>
+        ) : null}
+        {pins.length > 0 ? (
+          <div className="mt-4">
+            <RomiMap
+              stops={pins}
+              onSelect={(id) => {
+                document
+                  .getElementById(`lookup-${id}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            />
+          </div>
+        ) : null}
+        {placeSearch.trim().length >= 2 && (
+          <div className="mt-4 space-y-3">
+            {hits.map((hit) => (
+              <article
+                key={`${hit.status}-${hit.id}`}
+                id={`lookup-${hit.id}`}
+                className="rounded-2xl bg-amber-50 p-4"
+              >
+                <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
+                  {hit.status === "verified"
+                    ? "SCOUT VERIFIED"
+                    : hit.status === "your-scout"
+                      ? "YOUR SCOUT REPORT"
+                      : "GOOGLE · NEEDS A SCOUT"}
+                </p>
+                <h4 className="mt-1 font-black text-slate-900">{hit.name}</h4>
+                <p className="text-sm text-slate-500">{hit.area}</p>
+                <p className="mt-1 text-sm text-slate-600">{hit.detail}</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {hit.status !== "verified" ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        startPlaceReport({ name: hit.name, area: hit.area })
+                      }
+                      className="rounded-full bg-orange-600 px-4 py-2 text-sm font-bold text-white"
+                    >
+                      Scout it
+                    </button>
+                  ) : (
+                    <span className="rounded-full bg-teal-700 px-4 py-2 text-center text-sm font-bold text-white">
+                      On the ROMI list
+                    </span>
+                  )}
+                  {hit.lat && hit.lng ? (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${hit.lat},${hit.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-teal-700 px-4 py-2 text-center text-sm font-bold text-teal-700"
+                    >
+                      Maps
+                    </a>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    );
   }
 
   function planStops() {
@@ -917,6 +1099,8 @@ export default function Home() {
                 : `Your ROMI plan for ${location}.`}
             </p>
           </header>
+
+          {!viewingSavedDay ? <LookupPanel /> : null}
 
           <section className="mt-7 rounded-3xl bg-teal-700 p-6 text-white shadow-lg">
             <p className="text-xs font-bold tracking-[0.18em] text-teal-100">
@@ -1398,51 +1582,7 @@ export default function Home() {
           </p>
         </section>
 
-        <section className="mt-8 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100">
-          <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-            LOOK UP A PLACE
-          </p>
-          <h3 className="mt-1 text-2xl font-black text-slate-900">
-            Know it already?
-          </h3>
-          <input
-            value={placeSearch}
-            onChange={(event) => setPlaceSearch(event.target.value)}
-            placeholder="Big B’s, Powerstop, Lodgepole…"
-            className="mt-4 w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
-          />
-          {placeSearch.trim().length >= 2 && (
-            <div className="mt-4 space-y-3">
-              {placeLookups().map((hit) => (
-                <article
-                  key={`${hit.status}-${hit.name}`}
-                  className="rounded-2xl bg-amber-50 p-4"
-                >
-                  <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
-                    {hit.status === "verified"
-                      ? "SCOUT VERIFIED"
-                      : hit.status === "your-scout"
-                        ? "YOUR SCOUT REPORT"
-                        : "NOT IN ROMI YET"}
-                  </p>
-                  <h4 className="mt-1 font-black text-slate-900">{hit.name}</h4>
-                  <p className="text-sm text-slate-500">{hit.detail}</p>
-                  {hit.status !== "verified" && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        startPlaceReport({ name: hit.name, area: hit.area })
-                      }
-                      className="mt-3 w-full rounded-full bg-orange-600 px-4 py-2 text-sm font-bold text-white"
-                    >
-                      Scout this place
-                    </button>
-                  )}
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+        <LookupPanel />
 
         <section className="mt-8">
           <p className="text-xs font-bold tracking-[0.16em] text-orange-700">

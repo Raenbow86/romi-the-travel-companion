@@ -14,7 +14,7 @@ const needs = [
   { icon: "🧺", label: "Laundry", detail: "Laundromats and campground laundry" },
   { icon: "🐾", label: "Dog Needs", detail: "Pet-friendly stops, supplies, and walks" },
   { icon: "🏔️", label: "Adventure", detail: "Trails, fishing, views, and local fun" },
-  { icon: "🍷", label: "Wine", detail: "Tasting rooms, orchards, and fruit wine" },
+  { icon: "🍷", label: "Adult-friendly", detail: "Wine, beer, liquor, bars, and wineries" },
 ];
 
 const suggestedAreas = [
@@ -101,7 +101,7 @@ const realStops = [
     region: "paonia",
     description:
       "Orchard, farm market, and wine in one stop, with a river picnic if you want it.",
-    helpsWith: ["Food", "Wine", "Dog Needs"],
+    helpsWith: ["Food", "Adult-friendly", "Dog Needs"],
     note: "15836 Black Bridge Rd. In season often 10am–6pm, Memorial Day through Halloween. Dog-friendly park area. Bring a box for u-pick.",
   },
   {
@@ -114,7 +114,7 @@ const realStops = [
     region: "paonia",
     description:
       "High-elevation tasting room with a wow view. Makes the wine-country day feel special.",
-    helpsWith: ["Wine", "Adventure"],
+    helpsWith: ["Adult-friendly", "Adventure"],
     note: "14139 Runzel Gulch Rd. Often Thu–Sun, noon–7pm, Memorial Day through late October. Gravel road with two sharp switchbacks. Slow for big rigs.",
   },
   {
@@ -127,7 +127,7 @@ const realStops = [
     region: "paonia",
     description:
       "Orchard, cafe, cider, and campground on Hwy 133. Easy lunch between wineries. Dogs welcome.",
-    helpsWith: ["Food", "Wine", "Dog Needs", "Sleep", "Wi‑Fi & Cell"],
+    helpsWith: ["Food", "Adult-friendly", "Dog Needs", "Sleep", "Wi‑Fi & Cell"],
     note: "39126 Hwy 133. Open about April–November. Courtyard has WiFi. Optional overnight if you want orchard quiet.",
   },
   {
@@ -153,7 +153,7 @@ const realStops = [
     region: "paonia",
     description:
       "The wine stop that made a traveler want to make fruit wine. A destination, not a five-minute pour.",
-    helpsWith: ["Wine", "Food", "Adventure"],
+    helpsWith: ["Adult-friendly", "Food", "Adventure"],
     note: "31262 L Rd. Seasonal; often evenings Wed–Sat and Sunday brunch. Call first. Go when the kitchen is open.",
   },
   {
@@ -649,7 +649,7 @@ export default function Home() {
       }));
   }
 
-  function LookupPanel() {
+  function renderLookup() {
     const hits = placeLookups();
     const pins = lookupMapStops();
     return (
@@ -873,10 +873,11 @@ export default function Home() {
               ROMI SCOUT REPORT
             </p>
             <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">
-              Add a place you know
+              Your scouts
             </h1>
+            <p className="mt-2 text-2xl font-black text-teal-800">{scoutPoints} pts</p>
             <p className="mt-2 leading-6 text-slate-600">
-              Share only what you personally experienced. Honest notes are what make
+              Your reports live here — not on Today. Honest notes are what make
               ROMI useful.
             </p>
           </header>
@@ -1100,7 +1101,7 @@ export default function Home() {
             </p>
           </header>
 
-          {!viewingSavedDay ? <LookupPanel /> : null}
+          {!viewingSavedDay ? renderLookup() : null}
 
           <section className="mt-7 rounded-3xl bg-teal-700 p-6 text-white shadow-lg">
             <p className="text-xs font-bold tracking-[0.18em] text-teal-100">
@@ -1582,7 +1583,7 @@ export default function Home() {
           </p>
         </section>
 
-        <LookupPanel />
+        {renderLookup()}
 
         <section className="mt-8">
           <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
@@ -1623,17 +1624,6 @@ export default function Home() {
               );
             })}
           </div>
-        </section>
-
-        <section className="mt-8 rounded-3xl bg-teal-700 p-5 text-white shadow-md">
-          <p className="text-xs font-bold tracking-[0.18em] text-teal-100">
-            SCOUT SCORE
-          </p>
-          <h3 className="mt-1 text-3xl font-black">{scoutPoints} pts</h3>
-          <p className="mt-2 text-sm text-teal-50">
-            File honest reports from places you actually went. Later, scouts get
-            accounts, area pings, and real rewards. Fake reports won’t count.
-          </p>
         </section>
 
         <section className="mt-8 rounded-3xl border border-orange-200 bg-orange-50 p-5">

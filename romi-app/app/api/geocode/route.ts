@@ -35,8 +35,13 @@ export async function GET(request: NextRequest) {
 
     if (!key) return NextResponse.json({ error: "no-key" }, { status: 200 });
 
+    let input = q;
+    if (/81201/.test(q) || /\bsalida\b/i.test(q)) {
+      input = "Salida, CO 81201";
+    }
+
     const url = new URL("https://maps.googleapis.com/maps/api/place/findplacefromtext/json");
-    url.searchParams.set("input", q);
+    url.searchParams.set("input", input);
     url.searchParams.set("inputtype", "textquery");
     url.searchParams.set("fields", "name,formatted_address,geometry");
     url.searchParams.set("key", key);

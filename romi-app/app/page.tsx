@@ -207,6 +207,16 @@ type SavedDay = {
   placeIds: string[];
 };
 
+type NearbyPlace = {
+  id: string;
+  name: string;
+  area: string;
+  lat: number;
+  lng: number;
+  icon: string;
+  helpsWith: string[];
+};
+
 type TravelerReport = {
   name: string;
   area: string;
@@ -230,6 +240,9 @@ export default function Home() {
   const [savedDays, setSavedDays] = useState<SavedDay[]>([]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [dayName, setDayName] = useState("");
+  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
+  const [nearbyStatus, setNearbyStatus] = useState<"idle" | "loading" | "ready">("idle");
+  const [scoutPoints, setScoutPoints] = useState(0);
 
   const [reportName, setReportName] = useState("");
   const [reportArea, setReportArea] = useState("");
@@ -268,6 +281,12 @@ export default function Home() {
           setSavedDays(parsedDays);
         }
       }
+
+      const pointsRaw = window.localStorage.getItem("romi-scout-points");
+      if (pointsRaw) {
+        const parsedPoints = Number(pointsRaw);
+        if (!Number.isNaN(parsedPoints)) setScoutPoints(parsedPoints);
+      }
     } catch {
       // ROMI will simply start with no reports if storage is unavailable.
     } finally {
@@ -291,10 +310,42 @@ export default function Home() {
         "romi-saved-days",
         JSON.stringify(savedDays)
       );
+      window.localStorage.setItem("romi-scout-points", String(scoutPoints));
     } catch {
       // Reports still work for this visit if device storage is unavailable.
     }
-  }, [travelerReports, savedPlaceIds, savedDays, hasLoadedReports]);
+  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, hasLoadedReports]);
+
+  useEffect(() => {
+    if (screen !== "results" || !location.trim()) return;
+
+    let cancelled = false;
+    setNearbyStatus("loading");
+
+    const exclude = realStops.map((stop) => stop.name.toLowerCase()).join("|");
+    const params = new URLSearchParams({
+      area: location,
+      needs: selectedNeeds.join(","),
+      exclude,
+    });
+
+    fetch(`/api/nearby?${params.toString()}`)
+      .then((response) => response.json())
+      .then((data: { places?: NearbyPlace[] }) => {
+        if (cancelled) return;
+        setNearbyPlaces(data.places || []);
+        setNearbyStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setNearbyPlaces([]);
+        setNearbyStatus("ready");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, location, selectedNeeds]);
 
   function toggleSavePlace(placeId: string) {
     setSavedPlaceIds((current) =>
@@ -429,9 +480,9 @@ export default function Home() {
     setScreen("results");
   }
 
-  function startPlaceReport() {
-    setReportName("");
-    setReportArea(location);
+  function startPlaceReport(prefill?: { name?: string; area?: string }) {
+    setReportName(prefill?.name || "");
+    setReportArea(prefill?.area || location);
     setReportNeeds(selectedNeeds);
     setDogFriendly("");
     setShade("");
@@ -460,6 +511,11 @@ export default function Home() {
     };
 
     setTravelerReports((current) => [newReport, ...current]);
+    const earned =
+      10 +
+      (newReport.notes ? 10 : 0) +
+      (newReport.helpsWith.length >= 2 ? 5 : 0);
+    setScoutPoints((current) => current + earned);
     setLocation(reportArea.trim());
     setScreen("results");
   }
@@ -869,10 +925,10 @@ export default function Home() {
                       <div>
                         <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
                           {matches.length > 0
-                            ? `${matches.length} MISSION MATCH${
+                            ? `SCOUT VERIFIED · ${matches.length} MATCH${
                                 matches.length === 1 ? "" : "ES"
                               }`
-                            : "REAL ROMI STOP"}
+                            : "SCOUT VERIFIED"}
                         </p>
                         <h4 className="mt-1 text-lg font-black text-slate-900">
                           {stop.name}
@@ -924,6 +980,85 @@ export default function Home() {
                 );
               })}
             </div>
+          </section>
+
+          <section className="mt-8">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
+              NEEDS A SCOUT
+            </p>
+            <h3 className="mt-1 text-2xl font-black text-slate-900">
+              Also nearby
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              These are map listings, not yet scout-verified. Go there, file a
+              report, and earn scout points. Honest notes beat a long list.
+            </p>
+
+            {nearbyStatus === "loading" ? (
+              <p className="mt-4 text-sm font-semibold text-slate-500">
+                Looking around {location}…
+              </p>
+            ) : nearbyPlaces.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500">
+                No extra listings right now. Add a place you know instead.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-4">
+                {nearbyPlaces.map((place) => (
+                  <article
+                    key={place.id}
+                    className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-dashed ring-amber-300"
+                  >
+                    <p className="text-xs font-bold tracking-[0.14em] text-orange-700">
+                      NEEDS A SCOUT
+                    </p>
+                    <div className="mt-1 flex gap-3">
+                      <span className="text-3xl">{place.icon}</span>
+                      <div>
+                        <h4 className="text-lg font-black text-slate-900">
+                          {place.name}
+                        </h4>
+                        <p className="text-sm font-semibold text-slate-500">
+                          📍 {place.area}
+                        </p>
+                      </div>
+                    </div>
+                    {place.helpsWith.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {place.helpsWith.map((need) => (
+                          <span
+                            key={need}
+                            className="rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-orange-700"
+                          >
+                            {need}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        startPlaceReport({
+                          name: place.name,
+                          area: place.area,
+                        })
+                      }
+                      className="mt-4 w-full rounded-full bg-orange-600 px-5 py-3 font-bold text-white"
+                    >
+                      Scout this place · earn points
+                    </button>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 block w-full rounded-full border border-teal-700 px-5 py-3 text-center font-bold text-teal-700"
+                    >
+                      Open in Maps
+                    </a>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="mt-8 rounded-3xl border border-orange-200 bg-orange-50 p-5">
@@ -1111,6 +1246,17 @@ export default function Home() {
               );
             })}
           </div>
+        </section>
+
+        <section className="mt-8 rounded-3xl bg-teal-700 p-5 text-white shadow-md">
+          <p className="text-xs font-bold tracking-[0.18em] text-teal-100">
+            SCOUT SCORE
+          </p>
+          <h3 className="mt-1 text-3xl font-black">{scoutPoints} pts</h3>
+          <p className="mt-2 text-sm text-teal-50">
+            File honest reports from places you actually went. Later, scouts get
+            accounts, area pings, and real rewards. Fake reports won’t count.
+          </p>
         </section>
 
         {savedDays.length > 0 && (

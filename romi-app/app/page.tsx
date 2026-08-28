@@ -251,6 +251,7 @@ export default function Home() {
   const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlace[]>([]);
   const [nearbyStatus, setNearbyStatus] = useState<"idle" | "loading" | "ready">("idle");
   const [scoutPoints, setScoutPoints] = useState(0);
+  const [showAlsoInArea, setShowAlsoInArea] = useState(false);
 
   const [reportName, setReportName] = useState("");
   const [reportArea, setReportArea] = useState("");
@@ -330,7 +331,7 @@ export default function Home() {
     let cancelled = false;
     setNearbyStatus("loading");
 
-    const exclude = realStops.map((stop) => stop.name.toLowerCase()).join("|");
+    const exclude = realStops.map((stop) => stop.name).join("|");
     const params = new URLSearchParams({
       area: location,
       needs: selectedNeeds.join(","),
@@ -383,6 +384,22 @@ export default function Home() {
     return selectedNeeds.filter((need) => placeNeeds.includes(need));
   }
 
+  function compactName(value: string) {
+    return value
+      .toLowerCase()
+      .replace(/[''`´]/g, "")
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, "")
+      .replace(/^the/, "");
+  }
+
+  function isSamePlace(a: string, b: string) {
+    const ca = compactName(a);
+    const cb = compactName(b);
+    if (!ca || !cb) return false;
+    return ca === cb || ca.includes(cb) || cb.includes(ca);
+  }
+
   function stopsForLocation(currentLocation: string) {
     const q = currentLocation.toLowerCase();
     const paonia =
@@ -432,11 +449,32 @@ export default function Home() {
   function rankedStops(currentLocation: string) {
     const stops = [...stopsForLocation(currentLocation)];
     if (selectedNeeds.length === 0) return stops;
-    return stops.sort((a, b) => {
-      const am = matchingNeeds(a.helpsWith).length;
-      const bm = matchingNeeds(b.helpsWith).length;
-      return bm - am;
-    });
+    return stops
+      .filter((stop) => matchingNeeds(stop.helpsWith).length > 0)
+      .sort((a, b) => {
+        const am = matchingNeeds(a.helpsWith).length;
+        const bm = matchingNeeds(b.helpsWith).length;
+        const aAll = am === selectedNeeds.length ? 1 : 0;
+        const bAll = bm === selectedNeeds.length ? 1 : 0;
+        return bAll - aAll || bm - am;
+      });
+  }
+
+  function extraStops(currentLocation: string) {
+    if (selectedNeeds.length === 0) return [];
+    return stopsForLocation(currentLocation).filter(
+      (stop) => matchingNeeds(stop.helpsWith).length === 0,
+    );
+  }
+
+  function nearbyLeads() {
+    return nearbyPlaces
+      .filter((place) => !realStops.some((stop) => isSamePlace(stop.name, place.name)))
+      .filter((place) => {
+        if (selectedNeeds.length === 0 || place.helpsWith.length === 0) return true;
+        return place.helpsWith.some((need) => selectedNeeds.includes(need));
+      })
+      .slice(0, 5);
   }
 
   function saveThisDay() {
@@ -880,7 +918,7 @@ export default function Home() {
           )}
 
           <RomiMap
-            stops={stopsForLocation(location)}
+            stops={rankedStops(location)}
             onSelect={(id) => {
               setHighlightedId(id);
               document
@@ -891,103 +929,144 @@ export default function Home() {
 
           <section className="mt-8">
             <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
-              REAL ROMI PLACES
+              MATCHED STOPS
             </p>
             <h3 className="mt-1 text-2xl font-black text-slate-900">
-              Places that could help together
+              {selectedNeeds.length >= 2
+                ? `${selectedNeeds.join(" + ")} together`
+                : "Places for this mission"}
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {stopsForLocation(location).some((stop) => stop.region === "paonia") &&
-              !stopsForLocation(location).some((stop) => stop.region === "gunnison")
-                ? "A tested North Fork wine-country stretch from a real traveler: bread in Paonia, wine in Hotchkiss, canyon light at Pine Point."
-                : "A small Gunnison-area day: sleep at Lodgepole, resupply at Three Rivers, burgers and fuel at The Powerstop."}
+              Best first: stops that cover more of what you tapped. One card =
+              what that stop actually does.
             </p>
 
-            <div className="mt-5 space-y-4">
-              {rankedStops(location).map((stop, index, list) => {
+            <div className="mt-5 space-y-3">
+              {rankedStops(location).length === 0 ? (
+                <p className="rounded-3xl bg-white p-5 text-sm text-slate-600 shadow-sm">
+                  No scout-verified stop covers that mix yet. Check a few leads
+                  below, or add a place you know.
+                </p>
+              ) : null}
+              {rankedStops(location).map((stop) => {
                 const matches = matchingNeeds(stop.helpsWith);
                 const saved = savedPlaceIds.includes(stop.id);
-                const firstUnmatched =
-                  selectedNeeds.length > 0 &&
-                  matches.length === 0 &&
-                  (index === 0 ||
-                    matchingNeeds(list[index - 1].helpsWith).length > 0);
+                const perfect =
+                  selectedNeeds.length >= 2 &&
+                  matches.length === selectedNeeds.length;
 
                 return (
                   <article
                     key={stop.id}
                     id={`place-${stop.id}`}
-                    className={`rounded-3xl bg-white p-5 shadow-sm ring-1 ${
-                      highlightedId === stop.id
+                    className={`rounded-3xl bg-white p-4 shadow-sm ring-1 ${
+                      highlightedId === stop.id || perfect
                         ? "ring-2 ring-orange-500"
                         : "ring-amber-100"
                     }`}
                   >
-                    {firstUnmatched ? (
-                      <p className="mb-3 text-xs font-bold tracking-[0.16em] text-slate-500">
-                        ALSO IN THIS AREA
-                      </p>
-                    ) : null}
                     <div className="flex gap-3">
                       <span className="text-3xl">{stop.icon}</span>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
-                          {matches.length > 0
-                            ? `SCOUT VERIFIED · ${matches.length} MATCH${
-                                matches.length === 1 ? "" : "ES"
-                              }`
-                            : "SCOUT VERIFIED"}
+                          {perfect
+                            ? `TOGETHER · ${matches.join(" + ")}`
+                            : `SCOUT VERIFIED · ${matches.join(" · ") || "MATCH"}`}
                         </p>
-                        <h4 className="mt-1 text-lg font-black text-slate-900">
+                        <h4 className="mt-1 text-lg font-black leading-6 text-slate-900">
                           {stop.name}
                         </h4>
+                        <p className="text-xs font-semibold text-slate-500">
+                          📍 {stop.area}
+                        </p>
                       </div>
                     </div>
 
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {stop.description}
-                    </p>
-
-                    {matches.length > 0 && (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {matches.map((need) => (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {stop.helpsWith.map((need) => {
+                        const on = matches.includes(need);
+                        return (
                           <span
                             key={need}
-                            className="rounded-full bg-orange-50 px-3 py-1 text-sm font-semibold text-orange-700"
+                            className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                              on
+                                ? "bg-orange-500 text-white"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
                           >
                             {need}
                           </span>
-                        ))}
-                      </div>
-                    )}
+                        );
+                      })}
+                    </div>
 
-                    <p className="mt-4 rounded-2xl bg-teal-50 p-3 text-sm font-semibold text-teal-800">
+                    <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600">
+                      {stop.description}
+                    </p>
+
+                    <p className="mt-3 line-clamp-2 text-sm font-semibold text-teal-800">
                       🧭 {stop.note}
                     </p>
 
-                    <button
-                      type="button"
-                      onClick={() => toggleSavePlace(stop.id)}
-                      className={`mt-4 w-full rounded-full px-5 py-3 font-bold ${
-                        saved
-                          ? "border border-teal-700 bg-white text-teal-700"
-                          : "bg-orange-600 text-white"
-                      }`}
-                    >
-                      {saved ? "Saved — tap to unsave" : "Save this place"}
-                    </button>
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 block w-full rounded-full border border-teal-700 px-5 py-3 text-center font-bold text-teal-700"
-                    >
-                      Open in Maps
-                    </a>
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleSavePlace(stop.id)}
+                        className={`rounded-full px-4 py-3 text-sm font-bold ${
+                          saved
+                            ? "border border-teal-700 bg-white text-teal-700"
+                            : "bg-orange-600 text-white"
+                        }`}
+                      >
+                        {saved ? "Saved" : "Save"}
+                      </button>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border border-teal-700 px-4 py-3 text-center text-sm font-bold text-teal-700"
+                      >
+                        Maps
+                      </a>
+                    </div>
                   </article>
                 );
               })}
             </div>
+
+            {extraStops(location).length > 0 ? (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAlsoInArea((open) => !open)}
+                  className="w-full rounded-full border border-amber-200 bg-white px-5 py-3 text-sm font-bold text-slate-600"
+                >
+                  {showAlsoInArea
+                    ? "Hide other stops in this area"
+                    : `Show ${extraStops(location).length} more in this area`}
+                </button>
+                {showAlsoInArea ? (
+                  <div className="mt-3 space-y-3">
+                    {extraStops(location).map((stop) => (
+                      <article
+                        key={`extra-${stop.id}`}
+                        className="rounded-3xl bg-white p-4 opacity-90 shadow-sm ring-1 ring-slate-100"
+                      >
+                        <p className="text-xs font-bold tracking-[0.14em] text-slate-400">
+                          NOT THIS MISSION
+                        </p>
+                        <h4 className="mt-1 font-black text-slate-800">
+                          {stop.icon} {stop.name}
+                        </h4>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {stop.helpsWith.join(" · ")}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
           <section className="mt-8">
@@ -995,25 +1074,24 @@ export default function Home() {
               NEEDS A SCOUT
             </p>
             <h3 className="mt-1 text-2xl font-black text-slate-900">
-              Also nearby
+              A few unscouted leads
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Same card shape as scout-verified stops, but the facts come from
-              Google or the map — ratings, hours, website, a review snippet.
-              Until a scout goes, it is only a lead.
+              Not on the verified list. Google facts only. We hide places you
+              already scouted.
             </p>
 
             {nearbyStatus === "loading" ? (
               <p className="mt-4 text-sm font-semibold text-slate-500">
                 Looking around {location}…
               </p>
-            ) : nearbyPlaces.length === 0 ? (
+            ) : nearbyLeads().length === 0 ? (
               <p className="mt-4 text-sm text-slate-500">
                 No extra listings right now. Add a place you know instead.
               </p>
             ) : (
               <div className="mt-4 space-y-4">
-                {nearbyPlaces.map((place) => (
+                {nearbyLeads().map((place) => (
                   <article
                     key={place.id}
                     className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-dashed ring-amber-300"

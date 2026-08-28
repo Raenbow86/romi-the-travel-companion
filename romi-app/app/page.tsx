@@ -373,7 +373,7 @@ export default function Home() {
       radius: String(radiusMeters),
       exclude: realStops.map((s) => s.name).join("|"),
     });
-    if (refinements.length) params.set("extra", refinements.join(" "));
+    if (refinements.length) params.set("extra", refinements.join(","));
     fetch(`/api/nearby?${params.toString()}`)
       .then((r) => r.json())
       .then((data: { places?: NearbyPlace[] }) => {
@@ -579,6 +579,7 @@ export default function Home() {
   }
 
   function toggleNeed(label: string) {
+    setPlaceSearch("");
     setSelectedNeeds((current) =>
       current.includes(label) ? current.filter((n) => n !== label) : [...current, label],
     );
@@ -587,6 +588,7 @@ export default function Home() {
   function addRefinement(text: string) {
     const chip = text.trim().replace(/\s+/g, " ");
     if (!chip) return;
+    setPlaceSearch("");
     setRefinements((current) =>
       current.some((item) => item.toLowerCase() === chip.toLowerCase())
         ? current
@@ -1066,47 +1068,12 @@ export default function Home() {
           </form>
         )}
 
-        {!viewingSavedDay && origin && (
-          <form onSubmit={talkToRomi} className="mt-5 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">TELL ROMI</p>
-            <h3 className="mt-1 text-xl font-black text-slate-900">Get more specific</h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Talk like you would to a friend. “Adventure and adult-friendly, but golf carts.”
-            </p>
-            <textarea
-              value={briefDraft}
-              onChange={(event) => setBriefDraft(event.target.value)}
-              placeholder="I want adventure and drinks, like golf-cart bars…"
-              className="mt-3 h-24 w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
-            />
-            <button type="submit" className="mt-3 w-full rounded-full bg-teal-700 py-3 font-bold text-white">
-              Tell Romi
-            </button>
-            {romiReply ? (
-              <p className="mt-3 rounded-2xl bg-teal-50 p-3 text-sm font-semibold text-teal-900">
-                {romiReply}
-              </p>
-            ) : null}
-            {refinements.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {refinements.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setRefinements((current) => current.filter((r) => r !== item))}
-                    className="rounded-full bg-orange-100 px-3 py-1 text-sm font-bold text-orange-800"
-                  >
-                    {item} ×
-                  </button>
-                ))}
-              </div>
-            )}
-          </form>
-        )}
-
         {!viewingSavedDay && (
-          <section className="mt-5">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">FILTERS</p>
+          <section className="mt-5 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
+            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">FIND</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Pick a need, then a specific. Vet means vets — not dog parks.
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {needs.map((need) => {
                 const on = selectedNeeds.includes(need.label);
@@ -1116,7 +1083,7 @@ export default function Home() {
                     type="button"
                     onClick={() => toggleNeed(need.label)}
                     className={`rounded-full px-3 py-2 text-sm font-bold ${
-                      on ? "bg-orange-500 text-white" : "bg-white text-slate-700 ring-1 ring-amber-100"
+                      on ? "bg-orange-500 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                     }`}
                   >
                     {need.icon} {need.label}
@@ -1137,6 +1104,7 @@ export default function Home() {
                     selectedNeeds.includes("Dog Needs")
                       ? ["Dog park", "Vet", "Supplies", "Pet-friendly patio", "Off-leash"]
                       : [],
+                    selectedNeeds.includes("Food") ? ["Groceries", "Sit-down", "Coffee"] : [],
                   ] as string[][]
                 )
                   .flat()
@@ -1163,33 +1131,74 @@ export default function Home() {
                   })}
               </div>
             )}
-          </section>
-        )}
-
-        {!viewingSavedDay && origin && (
-          <section className="relative mt-5">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">SEARCH THIS AREA</p>
-            <input
-              value={placeSearch}
-              onChange={(e) => setPlaceSearch(e.target.value)}
-              placeholder="McD, Powerstop, Big B’s…"
-              className="mt-2 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
-            />
-            {suggestions.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
-                {suggestions.map((s) => (
+            {(selectedNeeds.length > 0 || refinements.length > 0) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedNeeds.map((need) => (
                   <button
-                    key={s.id}
+                    key={`on-${need}`}
                     type="button"
-                    onClick={() => pickSuggestion(s.id, s.name)}
-                    className="block w-full border-b border-amber-50 px-4 py-3 text-left last:border-0"
+                    onClick={() => toggleNeed(need)}
+                    className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-800"
                   >
-                    <p className="font-bold text-slate-900">{s.name}</p>
-                    <p className="text-xs text-slate-500">{s.area}</p>
+                    {need} ×
+                  </button>
+                ))}
+                {refinements.map((item) => (
+                  <button
+                    key={`ref-${item}`}
+                    type="button"
+                    onClick={() => setRefinements((current) => current.filter((r) => r !== item))}
+                    className="rounded-full bg-teal-100 px-3 py-1 text-xs font-bold text-teal-900"
+                  >
+                    {item} ×
                   </button>
                 ))}
               </div>
             )}
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const text = briefDraft.trim() || placeSearch.trim();
+                if (!text) return;
+                if (text.split(/\s+/).length >= 4 || /need|want|like/i.test(text)) {
+                  setBriefDraft(text);
+                  talkToRomi(event);
+                } else {
+                  setPlaceSearch(text);
+                  setBriefDraft("");
+                }
+              }}
+              className="relative mt-4"
+            >
+              <input
+                value={placeSearch || briefDraft}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setPlaceSearch(value);
+                  setBriefDraft(value);
+                }}
+                placeholder="Name a place, or say what you want…"
+                className="w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+              />
+              {suggestions.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => pickSuggestion(s.id, s.name)}
+                      className="block w-full border-b border-amber-50 px-4 py-3 text-left last:border-0"
+                    >
+                      <p className="font-bold text-slate-900">{s.name}</p>
+                      <p className="text-xs text-slate-500">{s.area}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </form>
+            {romiReply ? (
+              <p className="mt-3 rounded-2xl bg-teal-50 p-3 text-sm font-semibold text-teal-900">{romiReply}</p>
+            ) : null}
           </section>
         )}
 

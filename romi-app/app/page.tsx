@@ -286,6 +286,7 @@ export default function Home() {
   const [hasLoadedReports, setHasLoadedReports] = useState(false);
   const [savedPlaceIds, setSavedPlaceIds] = useState<string[]>([]);
   const [savedDays, setSavedDays] = useState<SavedDay[]>([]);
+  const [flaggedPlaces, setFlaggedPlaces] = useState<Array<{ id: string; name: string; needs: string[] }>>([]);
   const [scoutPoints, setScoutPoints] = useState(0);
   const [viewingSavedDay, setViewingSavedDay] = useState<SavedDay | null>(null);
   const [dayName, setDayName] = useState("");
@@ -321,6 +322,11 @@ export default function Home() {
         const n = Number(pointsRaw);
         if (!Number.isNaN(n)) setScoutPoints(n);
       }
+      const flagsRaw = window.localStorage.getItem("romi-flagged-places");
+      if (flagsRaw) {
+        const parsed = JSON.parse(flagsRaw);
+        if (Array.isArray(parsed)) setFlaggedPlaces(parsed);
+      }
       const originRaw = window.localStorage.getItem("romi-origin");
       if (originRaw) {
         const parsed = JSON.parse(originRaw) as Origin;
@@ -342,11 +348,12 @@ export default function Home() {
       window.localStorage.setItem("romi-saved-places", JSON.stringify(savedPlaceIds));
       window.localStorage.setItem("romi-saved-days", JSON.stringify(savedDays));
       window.localStorage.setItem("romi-scout-points", String(scoutPoints));
+      window.localStorage.setItem("romi-flagged-places", JSON.stringify(flaggedPlaces));
       if (origin) window.localStorage.setItem("romi-origin", JSON.stringify(origin));
     } catch {
       // ignore
     }
-  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, hasLoadedReports]);
+  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, flaggedPlaces, hasLoadedReports]);
 
   useEffect(() => {
     if (!origin) {
@@ -434,7 +441,9 @@ export default function Home() {
 
   function googleLeads() {
     const pool = placeSearch.trim().length >= 2 ? searchPlaces : nearbyPlaces;
+    const flagged = new Set(flaggedPlaces.map((f) => f.id));
     return pool
+      .filter((place) => !flagged.has(place.id))
       .filter((place) => !realStops.some((stop) => isSamePlace(stop.name, place.name)))
       .filter((place) => {
         if (selectedNeeds.length === 0 || !place.helpsWith?.length) return true;
@@ -751,6 +760,30 @@ export default function Home() {
             Maps
           </a>
         </div>
+        {status === "google" ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setFlaggedPlaces((current) =>
+                current.some((f) => f.id === place.id)
+                  ? current
+                  : [
+                      {
+                        id: place.id,
+                        name: place.name,
+                        needs: selectedNeeds,
+                      },
+                      ...current,
+                    ],
+              );
+              if (highlightedId === place.id) setHighlightedId(null);
+            }}
+            className="mt-2 w-full rounded-full border border-slate-200 py-2 text-sm font-semibold text-slate-500"
+          >
+            Doesn’t belong in this list
+          </button>
+        ) : null}
       </article>
     );
   }
@@ -771,6 +804,31 @@ export default function Home() {
               <p className="text-sm text-slate-500">📍 {report.area}</p>
             </article>
           ))}
+          {flaggedPlaces.length > 0 && (
+            <section className="mt-8">
+              <h2 className="text-xl font-black">Flagged as wrong</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Hidden from Explore. Undo if you tapped by mistake.
+              </p>
+              {flaggedPlaces.map((flag) => (
+                <article key={flag.id} className="mt-3 rounded-3xl bg-white p-4 shadow-sm">
+                  <h3 className="font-black">{flag.name}</h3>
+                  <p className="text-sm text-slate-500">
+                    {flag.needs.length ? flag.needs.join(" + ") : "Doesn’t belong"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFlaggedPlaces((current) => current.filter((f) => f.id !== flag.id))
+                    }
+                    className="mt-2 text-sm font-bold text-teal-700"
+                  >
+                    Undo flag
+                  </button>
+                </article>
+              ))}
+            </section>
+          )}
           <form onSubmit={savePlaceReport} className="mt-8 space-y-4">
             <h2 className="text-xl font-black">Add a report</h2>
             <input

@@ -42,6 +42,16 @@ const realStops = [
     helpsWith: ["Food", "Sleep", "Adventure"],
     note: "Store hours are often 7am–9pm. Confirm the Smokehouse and cabin availability before you count on them.",
   },
+  {
+    id: "the-powerstop",
+    icon: "⛽",
+    name: "The Powerstop",
+    area: "Gunnison, Colorado",
+    description:
+      "Gas station on N Main with a real burger counter inside. Locals rave about the burgers. Fuel is usually a bit more expensive — you’re paying for the food stop too.",
+    helpsWith: ["Food", "Fuel"],
+    note: "905 N Main St, Gunnison. Burgers, wings, breakfast. Confirm hours (often about 7am–10pm). Fill up if you need to, but the burger is the reason to pull in.",
+  },
 ];
 
 type Screen = "home" | "plan" | "results" | "report";
@@ -555,8 +565,8 @@ export default function Home() {
               Places that could help together
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Two real stops that work together: sleep at Lodgepole, resupply
-              at Three Rivers in Almont. Same screen. Same save.
+              A small Gunnison-area day: sleep at Lodgepole, resupply at Three
+              Rivers, burgers and fuel at The Powerstop. Same screen. Same save.
             </p>
 
             <div className="mt-5 space-y-4">

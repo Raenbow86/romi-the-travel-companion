@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { RomiMap } from "./RomiMap";
 
 const needs = [
   { icon: "🛏️", label: "Sleep", detail: "Campgrounds, cabins, and overnight options" },
@@ -27,6 +28,8 @@ const suggestedAreas = [
 const realStops = [
   {
     id: "lodgepole-campground",
+    lat: 38.761633,
+    lng: -106.662259,
     icon: "🏕️",
     name: "Lodgepole Campground",
     area: "near Almont / Gunnison, Colorado",
@@ -38,6 +41,8 @@ const realStops = [
   },
   {
     id: "three-rivers-resort",
+    lat: 38.6639,
+    lng: -106.8467,
     icon: "🛒",
     name: "Three Rivers Resort",
     area: "Almont, Colorado",
@@ -49,6 +54,8 @@ const realStops = [
   },
   {
     id: "the-powerstop",
+    lat: 38.5516,
+    lng: -106.9278,
     icon: "⛽",
     name: "The Powerstop",
     area: "Gunnison, Colorado",
@@ -60,6 +67,8 @@ const realStops = [
   },
   {
     id: "paonia-bread-works",
+    lat: 38.8684,
+    lng: -107.5924,
     icon: "🍎",
     name: "Paonia Bread Works",
     area: "Paonia, Colorado",
@@ -71,6 +80,8 @@ const realStops = [
   },
   {
     id: "town-of-paonia",
+    lat: 38.8683,
+    lng: -107.5919,
     icon: "📶",
     name: "Paonia",
     area: "Paonia, Colorado",
@@ -82,6 +93,8 @@ const realStops = [
   },
   {
     id: "orchard-valley-farms",
+    lat: 38.8568,
+    lng: -107.5985,
     icon: "🍎",
     name: "Orchard Valley Farms & Market",
     area: "Paonia, Colorado",
@@ -93,6 +106,8 @@ const realStops = [
   },
   {
     id: "storm-cellar",
+    lat: 38.7688,
+    lng: -107.6946,
     icon: "🍷",
     name: "The Storm Cellar",
     area: "Hotchkiss, Colorado",
@@ -104,6 +119,8 @@ const realStops = [
   },
   {
     id: "big-bs",
+    lat: 38.8275,
+    lng: -107.6958,
     icon: "🏕️",
     name: "Big B’s Delicious Orchards",
     area: "Hotchkiss, Colorado",
@@ -115,6 +132,8 @@ const realStops = [
   },
   {
     id: "farm-runners",
+    lat: 38.8004,
+    lng: -107.7176,
     icon: "🛒",
     name: "Farm Runners Station",
     area: "Hotchkiss, Colorado",
@@ -126,6 +145,8 @@ const realStops = [
   },
   {
     id: "mesa-winds",
+    lat: 38.8529,
+    lng: -107.7718,
     icon: "🍷",
     name: "Mesa Winds Farm & Winery",
     area: "Hotchkiss, Colorado",
@@ -137,6 +158,8 @@ const realStops = [
   },
   {
     id: "pickin-in-the-park",
+    lat: 38.8694,
+    lng: -107.5952,
     icon: "🏔️",
     name: "Pickin’ in the Park",
     area: "Paonia, Colorado",
@@ -148,6 +171,8 @@ const realStops = [
   },
   {
     id: "curecanti-pine-point",
+    lat: 38.4536,
+    lng: -107.3482,
     icon: "🏔️",
     name: "Curecanti — Pine Point",
     area: "Curecanti National Recreation Area",
@@ -159,6 +184,8 @@ const realStops = [
   },
   {
     id: "cedaredge",
+    lat: 38.9014,
+    lng: -107.9263,
     icon: "🏔️",
     name: "Cedaredge",
     area: "Cedaredge, Colorado",
@@ -192,6 +219,7 @@ export default function Home() {
   const [travelerReports, setTravelerReports] = useState<TravelerReport[]>([]);
   const [hasLoadedReports, setHasLoadedReports] = useState(false);
   const [savedPlaceIds, setSavedPlaceIds] = useState<string[]>([]);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
   const [reportName, setReportName] = useState("");
   const [reportArea, setReportArea] = useState("");
@@ -698,6 +726,16 @@ export default function Home() {
             </section>
           )}
 
+          <RomiMap
+            stops={stopsForLocation(location)}
+            onSelect={(id) => {
+              setHighlightedId(id);
+              document
+                .getElementById(`place-${id}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          />
+
           <section className="mt-8">
             <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
               REAL ROMI PLACES
@@ -720,7 +758,12 @@ export default function Home() {
                 return (
                   <article
                     key={stop.id}
-                    className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100"
+                    id={`place-${stop.id}`}
+                    className={`rounded-3xl bg-white p-5 shadow-sm ring-1 ${
+                      highlightedId === stop.id
+                        ? "ring-2 ring-orange-500"
+                        : "ring-amber-100"
+                    }`}
                   >
                     <div className="flex gap-3">
                       <span className="text-3xl">{stop.icon}</span>
@@ -770,6 +813,14 @@ export default function Home() {
                     >
                       {saved ? "Saved — tap to unsave" : "Save this place"}
                     </button>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${stop.lat},${stop.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 block w-full rounded-full border border-teal-700 px-5 py-3 text-center font-bold text-teal-700"
+                    >
+                      Open in Maps
+                    </a>
                   </article>
                 );
               })}

@@ -276,13 +276,25 @@ async function fromGoogle(
   needs: string[],
   exclude: string[],
   origin?: { lat: number; lng: number; radius?: number },
+  extra?: string,
 ): Promise<NearbyPlace[]> {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) return [];
 
   const center = centerFor(area, origin?.lat, origin?.lng, origin?.radius);
-  const selected = needs.length > 0 ? needs : ["Food", "Fuel", "Sleep"];
+  const selected = needs.length > 0 ? needs : extra ? [] : ["Food", "Fuel", "Sleep"];
   const queries = selected.flatMap((need) => NEED_QUERIES[need] || [{ type: "point_of_interest", keyword: need }]);
+  const phrase = (extra || "").trim().slice(0, 80);
+  if (phrase) {
+    queries.unshift({ type: "point_of_interest", keyword: phrase });
+    if (selected.includes("Adult-friendly") || /bar|beer|wine|golf|brew|cart/i.test(phrase)) {
+      queries.unshift({ type: "bar", keyword: phrase });
+      queries.unshift({ type: "tourist_attraction", keyword: phrase });
+    }
+    if (selected.includes("Adventure") || /hike|trail|jeep|atv|raft/i.test(phrase)) {
+      queries.unshift({ type: "park", keyword: phrase });
+    }
+  }
 
   const idSets = await Promise.all(
     queries.map((query) => nearbyIdsFor(center, query.type, query.keyword, key)),
@@ -546,6 +558,7 @@ export async function GET(request: NextRequest) {
     .toLowerCase()
     .split("|")
     .filter(Boolean);
+  const extra = (request.nextUrl.searchParams.get("extra") || "").trim();
   const latNum = Number(request.nextUrl.searchParams.get("lat"));
   const lngNum = Number(request.nextUrl.searchParams.get("lng"));
   const radiusNum = Number(request.nextUrl.searchParams.get("radius"));
@@ -556,7 +569,7 @@ export async function GET(request: NextRequest) {
 
   let googleError = "";
   try {
-    const google = await fromGoogle(area, needs, exclude, origin);
+    const google = await fromGoogle(area, needs, exclude, origin, extra);
     if (google.length > 0) {
       return NextResponse.json({ places: google, source: "google" });
     }

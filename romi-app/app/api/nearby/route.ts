@@ -116,9 +116,22 @@ function helpsFromGoogleTypes(types: string[] = []): string[] {
   return [...found];
 }
 
+function compactName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[''`´]/g, "")
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "")
+    .replace(/^the/, "");
+}
+
 function excludeMatch(name: string, exclude: string[]) {
-  const n = name.toLowerCase();
-  return exclude.some((ex) => n.includes(ex) || ex.includes(n));
+  const n = compactName(name);
+  return exclude.some((ex) => {
+    const e = compactName(ex);
+    if (!n || !e) return false;
+    return n === e || n.includes(e) || e.includes(n);
+  });
 }
 
 async function fromGoogle(

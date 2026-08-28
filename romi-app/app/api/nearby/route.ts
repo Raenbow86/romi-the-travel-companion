@@ -257,13 +257,13 @@ async function fromOsm(
     }>;
   };
 
-  return (data.elements || [])
-    .map((el) => {
+  const mapped: NearbyPlace[] = [];
+  for (const el of data.elements || []) {
       const lat = el.lat ?? el.center?.lat;
       const lng = el.lon ?? el.center?.lon;
       const tags = el.tags || {};
       const name = tags.name;
-      if (!lat || !lng || !name || excludeMatch(name, exclude)) return null;
+      if (!lat || !lng || !name || excludeMatch(name, exclude)) continue;
 
       const helpsWith = Object.entries(NEED_TAGS)
         .filter(([, osmTags]) =>
@@ -289,7 +289,7 @@ async function fromOsm(
       const phone = tags.phone || tags["contact:phone"];
       const primary = helpsWith[0] || "Adventure";
 
-      return {
+      mapped.push({
         id: `osm-${el.id}`,
         name,
         area: area || "Nearby",
@@ -309,11 +309,10 @@ async function fromOsm(
           .join(" "),
         website,
         hours,
-        source: "openstreetmap" as const,
-      };
-    })
-    .filter((place): place is NearbyPlace => Boolean(place))
-    .slice(0, 12);
+        source: "openstreetmap",
+      });
+  }
+  return mapped.slice(0, 12);
 }
 
 function fallbackPlaces(area: string, exclude: string[]): NearbyPlace[] {

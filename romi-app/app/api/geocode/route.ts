@@ -35,10 +35,7 @@ export async function GET(request: NextRequest) {
 
     if (!key) return NextResponse.json({ error: "no-key" }, { status: 200 });
 
-    let input = q;
-    if (/81201/.test(q) || /\bsalida\b/i.test(q)) {
-      input = "Salida, CO 81201";
-    }
+    const input = /^\d{5}$/.test(q) ? `${q} USA` : q;
 
     const url = new URL("https://maps.googleapis.com/maps/api/place/findplacefromtext/json");
     url.searchParams.set("input", input);

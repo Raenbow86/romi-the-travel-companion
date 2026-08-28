@@ -774,7 +774,7 @@ export default function Home() {
 
           <button
             type="button"
-            onClick={startPlaceReport}
+            onClick={() => startPlaceReport()}
             className="mt-6 w-full rounded-3xl bg-orange-600 p-5 text-left text-white shadow-md"
           >
             <p className="text-xs font-bold tracking-[0.16em] text-orange-100">

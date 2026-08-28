@@ -13,12 +13,15 @@ const needs = [
   { icon: "🧺", label: "Laundry", detail: "Laundromats and campground laundry" },
   { icon: "🐾", label: "Dog Needs", detail: "Pet-friendly stops, supplies, and walks" },
   { icon: "🏔️", label: "Adventure", detail: "Trails, fishing, views, and local fun" },
+  { icon: "🍷", label: "Wine", detail: "Tasting rooms, orchards, and fruit wine" },
 ];
 
 const suggestedAreas = [
   "Lodgepole Campground, Colorado",
   "Gunnison, Colorado",
   "Almont, Colorado",
+  "Paonia, Colorado",
+  "Hotchkiss, Colorado",
 ];
 
 const realStops = [
@@ -27,6 +30,7 @@ const realStops = [
     icon: "🏕️",
     name: "Lodgepole Campground",
     area: "near Almont / Gunnison, Colorado",
+    region: "gunnison",
     description:
       "National Forest campground near Almont and Gunnison, Colorado. Overnight, water access, dogs on leash, and nearby adventure.",
     helpsWith: ["Sleep", "Water", "Adventure", "Dog Needs"],
@@ -37,6 +41,7 @@ const realStops = [
     icon: "🛒",
     name: "Three Rivers Resort",
     area: "Almont, Colorado",
+    region: "gunnison",
     description:
       "On the Taylor River in Almont: general store, Smokehouse restaurant, cabins, and a practical stop between Gunnison and Lodgepole.",
     helpsWith: ["Food", "Sleep", "Adventure"],
@@ -47,10 +52,121 @@ const realStops = [
     icon: "⛽",
     name: "The Powerstop",
     area: "Gunnison, Colorado",
+    region: "gunnison",
     description:
       "Gas station on N Main with a real burger counter inside. Locals rave about the burgers. Fuel is usually a bit more expensive — you’re paying for the food stop too.",
     helpsWith: ["Food", "Fuel"],
     note: "905 N Main St, Gunnison. Burgers, wings, breakfast. Confirm hours (often about 7am–10pm). Fill up if you need to, but the burger is the reason to pull in.",
+  },
+  {
+    id: "paonia-bread-works",
+    icon: "🍎",
+    name: "Paonia Bread Works",
+    area: "Paonia, Colorado",
+    region: "paonia",
+    description:
+      "Standout of the trip. Bread and food were extremely good. Go early — they close around 1.",
+    helpsWith: ["Food"],
+    note: "530 Grand Ave, Paonia. Typically 7am–1pm. Grab bread to go for later stops. Bring a backup payment.",
+  },
+  {
+    id: "town-of-paonia",
+    icon: "📶",
+    name: "Paonia",
+    area: "Paonia, Colorado",
+    region: "paonia",
+    description:
+      "Walk Grand Avenue and use town as the morning and evening hub. The living room of this wine-country stretch, not just a pin.",
+    helpsWith: ["Food", "Wi‑Fi & Cell"],
+    note: "Park once and walk. Peak late spring through harvest.",
+  },
+  {
+    id: "orchard-valley-farms",
+    icon: "🍎",
+    name: "Orchard Valley Farms & Market",
+    area: "Paonia, Colorado",
+    region: "paonia",
+    description:
+      "Orchard, farm market, and wine in one stop, with a river picnic if you want it.",
+    helpsWith: ["Food", "Wine", "Dog Needs"],
+    note: "15836 Black Bridge Rd. In season often 10am–6pm, Memorial Day through Halloween. Dog-friendly park area. Bring a box for u-pick.",
+  },
+  {
+    id: "storm-cellar",
+    icon: "🍷",
+    name: "The Storm Cellar",
+    area: "Hotchkiss, Colorado",
+    region: "paonia",
+    description:
+      "High-elevation tasting room with a wow view. Makes the wine-country day feel special.",
+    helpsWith: ["Wine", "Adventure"],
+    note: "14139 Runzel Gulch Rd. Often Thu–Sun, noon–7pm, Memorial Day through late October. Gravel road with two sharp switchbacks. Slow for big rigs.",
+  },
+  {
+    id: "big-bs",
+    icon: "🏕️",
+    name: "Big B’s Delicious Orchards",
+    area: "Hotchkiss, Colorado",
+    region: "paonia",
+    description:
+      "Orchard, cafe, cider, and campground on Hwy 133. Easy lunch between wineries. Dogs welcome.",
+    helpsWith: ["Food", "Wine", "Dog Needs", "Sleep", "Wi‑Fi & Cell"],
+    note: "39126 Hwy 133. Open about April–November. Courtyard has WiFi. Optional overnight if you want orchard quiet.",
+  },
+  {
+    id: "farm-runners",
+    icon: "🛒",
+    name: "Farm Runners Station",
+    area: "Hotchkiss, Colorado",
+    region: "paonia",
+    description:
+      "Farm market and cafe for Western Slope food. Stock the cooler, not just browse.",
+    helpsWith: ["Food"],
+    note: "235 Hwy 133, next to City Market. Confirm hours. Year-round local food.",
+  },
+  {
+    id: "mesa-winds",
+    icon: "🍷",
+    name: "Mesa Winds Farm & Winery",
+    area: "Hotchkiss, Colorado",
+    region: "paonia",
+    description:
+      "The wine stop that made a traveler want to make fruit wine. A destination, not a five-minute pour.",
+    helpsWith: ["Wine", "Food", "Adventure"],
+    note: "31262 L Rd. Seasonal; often evenings Wed–Sat and Sunday brunch. Call first. Go when the kitchen is open.",
+  },
+  {
+    id: "pickin-in-the-park",
+    icon: "🏔️",
+    name: "Pickin’ in the Park",
+    area: "Paonia, Colorado",
+    region: "paonia",
+    description:
+      "Free Thursday-night concerts in Paonia Town Park in August. Turns tasting rooms into an evening in town.",
+    helpsWith: ["Adventure", "Food"],
+    note: "Music from 6pm in August. Bring a chair or blanket. Arrive before 6 for a good spot.",
+  },
+  {
+    id: "curecanti-pine-point",
+    icon: "🏔️",
+    name: "Curecanti — Pine Point",
+    area: "Curecanti National Recreation Area",
+    region: "paonia",
+    description:
+      "Scenic stop where a real traveler walked all the way down along the reservoir / river. Breaks the food-and-wine loop with landscape.",
+    helpsWith: ["Adventure", "Dog Needs"],
+    note: "Pine Creek Trailhead off US-50. Pets on leash. Bring water — the climb back up is the workout. Confirm trailhead access.",
+  },
+  {
+    id: "cedaredge",
+    icon: "🏔️",
+    name: "Cedaredge",
+    area: "Cedaredge, Colorado",
+    region: "paonia",
+    description:
+      "Confirmed town on the same trip, toward Grand Mesa. Exact in-town stop still TBD — kept as a pin until more detail lands.",
+    helpsWith: ["Food", "Adventure"],
+    note: "Western extension of the Paonia stretch. Applefest in October. Tell ROMI the exact stop when you remember it.",
   },
 ];
 
@@ -156,6 +272,31 @@ export default function Home() {
 
   function matchingNeeds(placeNeeds: string[]) {
     return selectedNeeds.filter((need) => placeNeeds.includes(need));
+  }
+
+  function stopsForLocation(currentLocation: string) {
+    const q = currentLocation.toLowerCase();
+    const paonia =
+      q.includes("paonia") ||
+      q.includes("hotchkiss") ||
+      q.includes("cedaredge") ||
+      q.includes("north fork") ||
+      q.includes("curecanti") ||
+      q.includes("wine");
+    const gunnison =
+      q.includes("gunnison") ||
+      q.includes("almont") ||
+      q.includes("lodgepole") ||
+      q.includes("taylor") ||
+      q.includes("powerstop");
+
+    if (paonia && !gunnison) {
+      return realStops.filter((stop) => stop.region === "paonia");
+    }
+    if (gunnison && !paonia) {
+      return realStops.filter((stop) => stop.region === "gunnison");
+    }
+    return realStops;
   }
 
   function findHelpfulStops(event: FormEvent<HTMLFormElement>) {
@@ -565,12 +706,14 @@ export default function Home() {
               Places that could help together
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              A small Gunnison-area day: sleep at Lodgepole, resupply at Three
-              Rivers, burgers and fuel at The Powerstop. Same screen. Same save.
+              {stopsForLocation(location).some((stop) => stop.region === "paonia") &&
+              !stopsForLocation(location).some((stop) => stop.region === "gunnison")
+                ? "A tested North Fork wine-country stretch from a real traveler: bread in Paonia, wine in Hotchkiss, canyon light at Pine Point."
+                : "A small Gunnison-area day: sleep at Lodgepole, resupply at Three Rivers, burgers and fuel at The Powerstop."}
             </p>
 
             <div className="mt-5 space-y-4">
-              {realStops.map((stop) => {
+              {stopsForLocation(location).map((stop) => {
                 const matches = matchingNeeds(stop.helpsWith);
                 const saved = savedPlaceIds.includes(stop.id);
 

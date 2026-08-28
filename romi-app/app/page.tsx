@@ -215,6 +215,14 @@ type NearbyPlace = {
   lng: number;
   icon: string;
   helpsWith: string[];
+  description?: string;
+  note?: string;
+  website?: string;
+  hours?: string;
+  rating?: number;
+  reviewCount?: number;
+  reviewSnippet?: string;
+  source?: string;
 };
 
 type TravelerReport = {
@@ -990,8 +998,9 @@ export default function Home() {
               Also nearby
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              These are map listings, not yet scout-verified. Go there, file a
-              report, and earn scout points. Honest notes beat a long list.
+              Same card shape as scout-verified stops, but the facts come from
+              Google or the map — ratings, hours, website, a review snippet.
+              Until a scout goes, it is only a lead.
             </p>
 
             {nearbyStatus === "loading" ? (
@@ -1009,13 +1018,14 @@ export default function Home() {
                     key={place.id}
                     className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-dashed ring-amber-300"
                   >
-                    <p className="text-xs font-bold tracking-[0.14em] text-orange-700">
-                      NEEDS A SCOUT
-                    </p>
-                    <div className="mt-1 flex gap-3">
+                    <div className="flex gap-3">
                       <span className="text-3xl">{place.icon}</span>
                       <div>
-                        <h4 className="text-lg font-black text-slate-900">
+                        <p className="text-xs font-bold tracking-[0.14em] text-orange-700">
+                          NEEDS A SCOUT
+                          {place.source === "google" ? " · GOOGLE LISTING" : " · MAP LISTING"}
+                        </p>
+                        <h4 className="mt-1 text-lg font-black text-slate-900">
                           {place.name}
                         </h4>
                         <p className="text-sm font-semibold text-slate-500">
@@ -1023,6 +1033,20 @@ export default function Home() {
                         </p>
                       </div>
                     </div>
+
+                    {place.rating ? (
+                      <p className="mt-3 text-sm font-bold text-teal-800">
+                        ★ {place.rating}
+                        {place.reviewCount ? ` · ${place.reviewCount} Google reviews` : " on Google"}
+                      </p>
+                    ) : null}
+
+                    {place.description ? (
+                      <p className="mt-3 text-sm leading-6 text-slate-600">
+                        {place.description}
+                      </p>
+                    ) : null}
+
                     {place.helpsWith.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {place.helpsWith.map((need) => (
@@ -1035,6 +1059,22 @@ export default function Home() {
                         ))}
                       </div>
                     )}
+
+                    {place.reviewSnippet ? (
+                      <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm text-slate-700">
+                        “{place.reviewSnippet}”
+                        <span className="mt-1 block text-xs font-semibold text-slate-500">
+                          Google review — not a Romi scout
+                        </span>
+                      </p>
+                    ) : null}
+
+                    {place.note ? (
+                      <p className="mt-4 rounded-2xl bg-teal-50 p-3 text-sm font-semibold text-teal-800">
+                        🧭 {place.note}
+                      </p>
+                    ) : null}
+
                     <button
                       type="button"
                       onClick={() =>
@@ -1047,6 +1087,16 @@ export default function Home() {
                     >
                       Scout this place · earn points
                     </button>
+                    {place.website ? (
+                      <a
+                        href={place.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 block w-full rounded-full border border-orange-300 px-5 py-3 text-center font-bold text-orange-700"
+                      >
+                        Website
+                      </a>
+                    ) : null}
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`}
                       target="_blank"

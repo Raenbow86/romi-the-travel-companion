@@ -169,8 +169,15 @@ const NEED_QUERIES: Record<string, Array<{ type: string; keyword: string }>> = {
     { type: "liquor_store", keyword: "liquor wine" },
   ],
   Power: [{ type: "electric_vehicle_charging_station", keyword: "charging" }],
-  Shower: [{ type: "campground", keyword: "shower" }],
-  Water: [{ type: "campground", keyword: "potable water" }],
+  Shower: [
+    { type: "campground", keyword: "campground" },
+    { type: "rv_park", keyword: "rv park" },
+    { type: "spa", keyword: "hot springs soak" },
+  ],
+  Water: [
+    { type: "campground", keyword: "potable water fill" },
+    { type: "rv_park", keyword: "water fill" },
+  ],
   "Dog Needs": [{ type: "park", keyword: "dog park pet" }],
   "Wi‑Fi & Cell": [{ type: "cafe", keyword: "wifi" }],
 };
@@ -197,6 +204,47 @@ function compileBlurb(place: GoogleDetails) {
       (place.user_ratings_total ? ` from ${place.user_ratings_total} reviews.` : ".");
   }
   return "Google listing nearby. Open the card for hours and visitor notes.";
+}
+
+function looksWrongForNeeds(types: string[] = [], needs: string[]) {
+  const reject = [
+    "general_contractor",
+    "roofing_contractor",
+    "electrician",
+    "plumber",
+    "car_repair",
+    "car_dealer",
+    "real_estate_agency",
+    "insurance_agency",
+    "lawyer",
+    "storage",
+    "moving_company",
+    "hardware_store",
+    "home_goods_store",
+  ];
+  const amenity = [
+    "campground",
+    "rv_park",
+    "lodging",
+    "gas_station",
+    "restaurant",
+    "cafe",
+    "park",
+    "spa",
+    "gym",
+    "bar",
+    "supermarket",
+    "laundry",
+  ];
+  if (types.some((t) => reject.includes(t)) && !types.some((t) => amenity.includes(t))) {
+    return true;
+  }
+  if (needs.includes("Shower")) {
+    return !types.some((t) =>
+      ["campground", "rv_park", "lodging", "spa", "gym", "gas_station"].includes(t),
+    );
+  }
+  return false;
 }
 
 async function nearbyIdsFor(
@@ -269,7 +317,12 @@ async function fromGoogle(
 
   return detailed
     .filter((place): place is GoogleDetails & { placeId: string } =>
-      Boolean(place?.name && place.geometry?.location && !excludeMatch(place.name || "", exclude)),
+      Boolean(
+        place?.name &&
+          place.geometry?.location &&
+          !excludeMatch(place.name || "", exclude) &&
+          !looksWrongForNeeds(place.types, selected),
+      ),
     )
     .map((place) => {
       const helpsWith = helpsFromGoogleTypes(place.types);

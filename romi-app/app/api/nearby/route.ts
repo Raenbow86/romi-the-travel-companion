@@ -187,6 +187,42 @@ const NEED_QUERIES: Record<string, Array<{ type: string; keyword: string }>> = {
   "Wi‑Fi & Cell": [{ type: "cafe", keyword: "wifi" }],
 };
 
+const REFINE_QUERIES: Record<string, { need: string; queries: Array<{ type: string; keyword: string }> }> = {
+  vet: { need: "Dog Needs", queries: [{ type: "veterinary_care", keyword: "veterinarian animal hospital" }] },
+  "dog park": { need: "Dog Needs", queries: [{ type: "park", keyword: "dog park" }] },
+  supplies: { need: "Dog Needs", queries: [{ type: "pet_store", keyword: "pet supplies" }] },
+  "pet-friendly patio": {
+    need: "Dog Needs",
+    queries: [{ type: "restaurant", keyword: "dog friendly patio" }],
+  },
+  "off-leash": { need: "Dog Needs", queries: [{ type: "park", keyword: "off leash dog park" }] },
+  "golf carts": {
+    need: "Adult-friendly",
+    queries: [
+      { type: "bar", keyword: "golf cart" },
+      { type: "tourist_attraction", keyword: "golf cart" },
+    ],
+  },
+  brewery: { need: "Adult-friendly", queries: [{ type: "bar", keyword: "brewery" }] },
+  winery: { need: "Adult-friendly", queries: [{ type: "liquor_store", keyword: "winery tasting" }] },
+  cocktails: { need: "Adult-friendly", queries: [{ type: "bar", keyword: "cocktail bar" }] },
+  patio: { need: "Adult-friendly", queries: [{ type: "bar", keyword: "patio" }] },
+  hike: { need: "Adventure", queries: [{ type: "park", keyword: "hiking trail" }] },
+  fish: { need: "Adventure", queries: [{ type: "park", keyword: "fishing" }] },
+  view: { need: "Adventure", queries: [{ type: "tourist_attraction", keyword: "viewpoint overlook" }] },
+  "hot springs": { need: "Adventure", queries: [{ type: "spa", keyword: "hot springs" }] },
+  atv: { need: "Adventure", queries: [{ type: "tourist_attraction", keyword: "atv" }] },
+  groceries: { need: "Food", queries: [{ type: "supermarket", keyword: "grocery" }] },
+  "sit-down": { need: "Food", queries: [{ type: "restaurant", keyword: "restaurant" }] },
+  coffee: { need: "Food", queries: [{ type: "cafe", keyword: "coffee" }] },
+};
+
+function phraseHas(hay: string, needle: string) {
+  return new RegExp(`(^|[^a-z0-9])${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`, "i").test(
+    hay,
+  );
+}
+
 function todayHours(weekdayText?: string[], openNow?: boolean) {
   const day = new Date().toLocaleDateString("en-US", { weekday: "long" });
   const line = weekdayText?.find((entry) =>
@@ -288,26 +324,31 @@ async function fromGoogle(
 
   const center = centerFor(area, origin?.lat, origin?.lng, origin?.radius);
   const selected = needs.length > 0 ? needs : extra ? [] : ["Food", "Fuel", "Sleep"];
-  const queries: Array<{ type: string; keyword: string; need?: string }> = selected.flatMap((need) =>
-    (NEED_QUERIES[need] || [{ type: "point_of_interest", keyword: need }]).map((query) => ({
-      ...query,
-      need,
-    })),
-  );
-  const phrase = (extra || "").trim().slice(0, 80);
-  if (phrase) {
-    queries.unshift({ type: "point_of_interest", keyword: phrase, need: selected[0] });
-    if (selected.includes("Adult-friendly") || /bar|beer|wine|golf|brew|cart/i.test(phrase)) {
-      queries.unshift({ type: "bar", keyword: phrase, need: "Adult-friendly" });
-      queries.unshift({ type: "tourist_attraction", keyword: phrase, need: "Adult-friendly" });
+  const phrase = (extra || "").trim();
+  const refineKeys = Object.keys(REFINE_QUERIES).filter((key) => phraseHas(phrase, key));
+  const covered = new Set(refineKeys.map((key) => REFINE_QUERIES[key].need));
+  const queries: Array<{ type: string; keyword: string; need?: string }> = [];
+
+  for (const key of refineKeys) {
+    const refine = REFINE_QUERIES[key];
+    for (const query of refine.queries) {
+      queries.push({ ...query, need: refine.need });
     }
-    if (selected.includes("Adventure") || /hike|trail|jeep|atv|raft/i.test(phrase)) {
-      queries.unshift({ type: "park", keyword: phrase, need: "Adventure" });
+  }
+
+  for (const need of selected) {
+    if (covered.has(need)) continue;
+    for (const query of NEED_QUERIES[need] || [{ type: "point_of_interest", keyword: need }]) {
+      queries.push({ ...query, need });
     }
-    if (selected.includes("Dog Needs") || /dog|pup|vet|leash/i.test(phrase)) {
-      queries.unshift({ type: "park", keyword: phrase, need: "Dog Needs" });
-      queries.unshift({ type: "pet_store", keyword: phrase, need: "Dog Needs" });
-    }
+  }
+
+  if (phrase && refineKeys.length === 0) {
+    queries.unshift({ type: "point_of_interest", keyword: phrase.slice(0, 80), need: selected[0] });
+  }
+
+  if (queries.length === 0) {
+    queries.push({ type: "point_of_interest", keyword: phrase.slice(0, 80) || "food", need: "Food" });
   }
 
   const idToNeeds = new Map<string, Set<string>>();

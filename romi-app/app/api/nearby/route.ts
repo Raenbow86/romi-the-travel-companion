@@ -141,11 +141,16 @@ async function fromGoogle(
   nearbyUrl.searchParams.set("type", type);
   nearbyUrl.searchParams.set("key", key);
 
-  const nearbyRes = await fetch(nearbyUrl.toString(), { next: { revalidate: 300 } });
+  const nearbyRes = await fetch(nearbyUrl.toString(), { cache: "no-store" });
   if (!nearbyRes.ok) return [];
   const nearbyJson = (await nearbyRes.json()) as {
+    status?: string;
+    error_message?: string;
     results?: Array<{ place_id: string; name: string }>;
   };
+  if (nearbyJson.status && nearbyJson.status !== "OK" && nearbyJson.status !== "ZERO_RESULTS") {
+    throw new Error(nearbyJson.error_message || nearbyJson.status);
+  }
 
   const ids = (nearbyJson.results || [])
     .filter((r) => r.place_id && r.name && !excludeMatch(r.name, exclude))
@@ -161,7 +166,7 @@ async function fromGoogle(
         "name,formatted_address,geometry,website,url,formatted_phone_number,opening_hours,rating,user_ratings_total,editorial_summary,reviews,types",
       );
       detailsUrl.searchParams.set("key", key);
-      const res = await fetch(detailsUrl.toString(), { next: { revalidate: 300 } });
+      const res = await fetch(detailsUrl.toString(), { cache: "no-store" });
       if (!res.ok) return null;
       const json = (await res.json()) as { result?: GoogleDetails };
       return json.result || null;
@@ -232,13 +237,13 @@ async function fromOsm(
   const filters = tagsFor(needs)
     .map((tag) => `nwr${tag}(around:${center.radius},${center.lat},${center.lng});`)
     .join("\n");
-  const query = `[out:json][timeout:18];\n(\n${filters}\n);\nout center tags 20;`;
+  const query = `[out:json][timeout:18];\n(\n${filters}\n);\nout center;`;
 
   const response = await fetch("https://overpass-api.de/api/interpreter", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: `data=${encodeURIComponent(query)}`,
-    next: { revalidate: 300 },
+    cache: "no-store",
   });
   if (!response.ok) return [];
 
@@ -311,6 +316,87 @@ async function fromOsm(
     .slice(0, 12);
 }
 
+function fallbackPlaces(area: string, exclude: string[]): NearbyPlace[] {
+  const q = area.toLowerCase();
+  const paonia = q.includes("paonia") || q.includes("hotchkiss") || q.includes("wine");
+  const gunnison = q.includes("gunnison") || q.includes("almont") || q.includes("lodgepole");
+  const list: NearbyPlace[] = paonia
+    ? [
+        {
+          id: "lead-stone-cottage",
+          name: "Stone Cottage Cellars",
+          area: "Paonia, Colorado",
+          lat: 38.8706,
+          lng: -107.612,
+          icon: "🍷",
+          helpsWith: ["Wine", "Adventure"],
+          description:
+            "High-mesa tasting room above Paonia. Listed as a wine stop — not scout-verified in ROMI yet.",
+          note: "Confirm hours and the drive up. A scout has not filed a ROMI report.",
+          website: "https://www.stonecottagecellars.com/",
+          source: "openstreetmap",
+        },
+        {
+          id: "lead-azura",
+          name: "Azura Cellars",
+          area: "Paonia, Colorado",
+          lat: 38.873,
+          lng: -107.62,
+          icon: "🍷",
+          helpsWith: ["Wine", "Food", "Adventure"],
+          description:
+            "Winery and views west of town. Map/Google listing only until a scout goes.",
+          note: "Seasonal tasting hours. Not scout-verified.",
+          website: "https://www.azuracellars.com/",
+          source: "openstreetmap",
+        },
+        {
+          id: "lead-living-farm",
+          name: "The Living Farm Cafe",
+          area: "Paonia, Colorado",
+          lat: 38.8689,
+          lng: -107.5928,
+          icon: "🥬",
+          helpsWith: ["Food"],
+          description:
+            "Farm cafe in Paonia. Useful food lead — needs a real ROMI scout report.",
+          note: "Confirm open days. Not scout-verified.",
+          source: "openstreetmap",
+        },
+      ]
+    : gunnison
+      ? [
+          {
+            id: "lead-city-market",
+            name: "City Market",
+            area: "Gunnison, Colorado",
+            lat: 38.5519,
+            lng: -106.9272,
+            icon: "🛒",
+            helpsWith: ["Food"],
+            description:
+              "Main grocery on N Main. Resupply lead — not a scout-verified ROMI card yet.",
+            note: "880 N Main St. Confirm hours. Not scout-verified.",
+            source: "openstreetmap",
+          },
+          {
+            id: "lead-high-alpine",
+            name: "High Alpine Brewing",
+            area: "Gunnison, Colorado",
+            lat: 38.5447,
+            lng: -106.9275,
+            icon: "🍔",
+            helpsWith: ["Food"],
+            description:
+              "Downtown brewery and food. Google/map lead until a scout reports.",
+            note: "Not scout-verified.",
+            source: "openstreetmap",
+          },
+        ]
+      : [];
+  return list.filter((place) => !excludeMatch(place.name, exclude));
+}
+
 export async function GET(request: NextRequest) {
   const area = request.nextUrl.searchParams.get("area") || "";
   const needs = (request.nextUrl.searchParams.get("needs") || "")
@@ -322,14 +408,32 @@ export async function GET(request: NextRequest) {
     .split("|")
     .filter(Boolean);
 
+  let googleError = "";
   try {
     const google = await fromGoogle(area, needs, exclude);
     if (google.length > 0) {
       return NextResponse.json({ places: google, source: "google" });
     }
-    const osm = await fromOsm(area, needs, exclude);
-    return NextResponse.json({ places: osm, source: "openstreetmap" });
-  } catch {
-    return NextResponse.json({ places: [], error: "nearby-unavailable" }, { status: 200 });
+  } catch (err) {
+    googleError = err instanceof Error ? err.message : "google-failed";
   }
+
+  try {
+    const osm = await fromOsm(area, needs, exclude);
+    if (osm.length > 0) {
+      return NextResponse.json({
+        places: osm,
+        source: "openstreetmap",
+        googleError: googleError || undefined,
+      });
+    }
+  } catch {
+    // fall through to local leads
+  }
+
+  return NextResponse.json({
+    places: fallbackPlaces(area, exclude),
+    source: "fallback",
+    googleError: googleError || undefined,
+  });
 }

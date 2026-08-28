@@ -14,6 +14,7 @@ type NearbyPlace = {
   note: string;
   website?: string;
   hours?: string;
+  hoursFull?: string;
   rating?: number;
   reviewCount?: number;
   reviewSnippet?: string;
@@ -146,6 +147,82 @@ function excludeMatch(name: string, exclude: string[]) {
   });
 }
 
+const NEED_QUERIES: Record<string, Array<{ type: string; keyword: string }>> = {
+  Sleep: [
+    { type: "campground", keyword: "campground" },
+    { type: "rv_park", keyword: "rv park" },
+    { type: "lodging", keyword: "cabin motel" },
+  ],
+  Fuel: [{ type: "gas_station", keyword: "gas station diesel" }],
+  Food: [
+    { type: "restaurant", keyword: "restaurant" },
+    { type: "cafe", keyword: "cafe bakery" },
+    { type: "supermarket", keyword: "grocery" },
+  ],
+  Laundry: [{ type: "laundry", keyword: "laundromat" }],
+  Adventure: [
+    { type: "park", keyword: "trail park" },
+    { type: "tourist_attraction", keyword: "hike fishing viewpoint" },
+  ],
+  "Adult-friendly": [
+    { type: "bar", keyword: "bar brewery" },
+    { type: "liquor_store", keyword: "liquor wine" },
+  ],
+  Power: [{ type: "electric_vehicle_charging_station", keyword: "charging" }],
+  Shower: [{ type: "campground", keyword: "shower" }],
+  Water: [{ type: "campground", keyword: "potable water" }],
+  "Dog Needs": [{ type: "park", keyword: "dog park pet" }],
+  "Wi‑Fi & Cell": [{ type: "cafe", keyword: "wifi" }],
+};
+
+function todayHours(weekdayText?: string[], openNow?: boolean) {
+  const day = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const line = weekdayText?.find((entry) =>
+    entry.toLowerCase().startsWith(day.toLowerCase()),
+  );
+  const today = line ? line.replace(/^[^:]+:\s*/, "") : "";
+  if (openNow === true) return today && today.toLowerCase() !== "closed" ? `Open now · ${today}` : "Open now";
+  if (openNow === false) return today ? `Closed now · ${today}` : "Closed now";
+  return today || "";
+}
+
+function compileBlurb(place: GoogleDetails) {
+  const editorial = place.editorial_summary?.overview?.replace(/\s+/g, " ").trim();
+  const review = place.reviews?.[0]?.text?.replace(/\s+/g, " ").trim() || "";
+  const firstThought = review.split(/(?<=[.!?])\s+/).slice(0, 2).join(" ").slice(0, 220);
+  if (editorial) return editorial.slice(0, 240);
+  if (firstThought) return firstThought;
+  if (place.rating) {
+    return `Google visitors rate this ${place.rating}★` +
+      (place.user_ratings_total ? ` from ${place.user_ratings_total} reviews.` : ".");
+  }
+  return "Google listing nearby. Open the card for hours and visitor notes.";
+}
+
+async function nearbyIdsFor(
+  center: Center,
+  type: string,
+  keyword: string,
+  key: string,
+): Promise<string[]> {
+  const nearbyUrl = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
+  nearbyUrl.searchParams.set("location", `${center.lat},${center.lng}`);
+  nearbyUrl.searchParams.set("radius", String(Math.min(center.radius, 50000)));
+  nearbyUrl.searchParams.set("type", type);
+  nearbyUrl.searchParams.set("keyword", keyword);
+  nearbyUrl.searchParams.set("key", key);
+  const nearbyRes = await fetch(nearbyUrl.toString(), { cache: "no-store" });
+  if (!nearbyRes.ok) return [];
+  const nearbyJson = (await nearbyRes.json()) as {
+    status?: string;
+    results?: Array<{ place_id: string; name: string }>;
+  };
+  if (nearbyJson.status && nearbyJson.status !== "OK" && nearbyJson.status !== "ZERO_RESULTS") {
+    throw new Error(nearbyJson.status);
+  }
+  return (nearbyJson.results || []).slice(0, 5).map((r) => r.place_id).filter(Boolean);
+}
+
 async function fromGoogle(
   area: string,
   needs: string[],
@@ -156,32 +233,23 @@ async function fromGoogle(
   if (!key) return [];
 
   const center = centerFor(area, origin?.lat, origin?.lng, origin?.radius);
-  const primary = needs[0] || "Food";
-  const type = GOOGLE_TYPES[primary] || "point_of_interest";
-  const keyword = [...needs, area].join(" ");
+  const selected = needs.length > 0 ? needs : ["Food", "Fuel", "Sleep"];
+  const queries = selected.flatMap((need) => NEED_QUERIES[need] || [{ type: "point_of_interest", keyword: need }]);
 
-  const nearbyUrl = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
-  nearbyUrl.searchParams.set("location", `${center.lat},${center.lng}`);
-  nearbyUrl.searchParams.set("radius", String(Math.min(center.radius, 20000)));
-  nearbyUrl.searchParams.set("keyword", keyword);
-  nearbyUrl.searchParams.set("type", type);
-  nearbyUrl.searchParams.set("key", key);
-
-  const nearbyRes = await fetch(nearbyUrl.toString(), { cache: "no-store" });
-  if (!nearbyRes.ok) return [];
-  const nearbyJson = (await nearbyRes.json()) as {
-    status?: string;
-    error_message?: string;
-    results?: Array<{ place_id: string; name: string }>;
-  };
-  if (nearbyJson.status && nearbyJson.status !== "OK" && nearbyJson.status !== "ZERO_RESULTS") {
-    throw new Error(nearbyJson.error_message || nearbyJson.status);
+  const idSets = await Promise.all(
+    queries.map((query) => nearbyIdsFor(center, query.type, query.keyword, key)),
+  );
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const group of idSets) {
+    for (const id of group) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+      if (ids.length >= 12) break;
+    }
+    if (ids.length >= 12) break;
   }
-
-  const ids = (nearbyJson.results || [])
-    .filter((r) => r.place_id && r.name && !excludeMatch(r.name, exclude))
-    .slice(0, 8)
-    .map((r) => r.place_id);
 
   const detailed = await Promise.all(
     ids.map(async (placeId) => {
@@ -195,42 +263,34 @@ async function fromGoogle(
       const res = await fetch(detailsUrl.toString(), { cache: "no-store" });
       if (!res.ok) return null;
       const json = (await res.json()) as { result?: GoogleDetails };
-      return json.result || null;
+      return json.result ? { ...json.result, placeId } : null;
     }),
   );
 
   return detailed
-    .filter((place): place is GoogleDetails => Boolean(place?.name && place.geometry?.location))
+    .filter((place): place is GoogleDetails & { placeId: string } =>
+      Boolean(place?.name && place.geometry?.location && !excludeMatch(place.name || "", exclude)),
+    )
     .map((place) => {
       const helpsWith = helpsFromGoogleTypes(place.types);
-      const primaryNeed = helpsWith[0] || primary;
-      const review = place.reviews?.[0]?.text?.replace(/\s+/g, " ").slice(0, 220);
-      const hours = place.opening_hours?.weekday_text?.slice(0, 2).join(" · ");
-      const summary =
-        place.editorial_summary?.overview ||
-        (place.rating
-          ? `Google visitors rate this ${place.rating}★` +
-            (place.user_ratings_total ? ` from ${place.user_ratings_total} reviews.` : ".")
-          : "Listed on Google. A Romi scout has not confirmed it yet.");
-
-      const noteParts = [
-        hours ? `Hours (Google): ${hours}` : null,
-        place.formatted_phone_number ? `Phone ${place.formatted_phone_number}` : null,
-        "Not scout-verified — treat this as a lead, then go see it.",
-      ].filter(Boolean);
+      const primaryNeed = selected.find((need) => helpsWith.includes(need)) || helpsWith[0] || selected[0];
+      const hoursToday = todayHours(place.opening_hours?.weekday_text, place.opening_hours?.open_now);
+      const hoursFull = (place.opening_hours?.weekday_text || []).join("\n");
+      const review = place.reviews?.[0]?.text?.replace(/\s+/g, " ").slice(0, 280);
 
       return {
-        id: `google-${place.name}-${place.geometry!.location.lat}`,
+        id: place.placeId,
         name: place.name!,
         area: place.formatted_address || area,
         lat: place.geometry!.location.lat,
         lng: place.geometry!.location.lng,
         icon: ICONS[primaryNeed] || "📍",
         helpsWith,
-        description: summary,
-        note: noteParts.join(" "),
+        description: compileBlurb(place),
+        note: hoursToday || "Hours not listed — confirm before you go.",
         website: place.website || place.url,
-        hours,
+        hours: hoursToday,
+        hoursFull,
         rating: place.rating,
         reviewCount: place.user_ratings_total,
         reviewSnippet: review,
@@ -246,7 +306,7 @@ type GoogleDetails = {
   website?: string;
   url?: string;
   formatted_phone_number?: string;
-  opening_hours?: { weekday_text?: string[] };
+  opening_hours?: { weekday_text?: string[]; open_now?: boolean };
   rating?: number;
   user_ratings_total?: number;
   editorial_summary?: { overview?: string };

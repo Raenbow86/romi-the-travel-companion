@@ -33,7 +33,14 @@ const NEED_TAGS: Record<string, string[]> = {
   Shower: ['["amenity"="shower"]'],
   Laundry: ['["amenity"="laundry"]'],
   Adventure: ['["tourism"="viewpoint"]', '["leisure"="park"]'],
-  Wine: ['["craft"="winery"]', '["shop"="wine"]'],
+  "Adult-friendly": [
+    '["craft"="winery"]',
+    '["shop"="wine"]',
+    '["shop"="alcohol"]',
+    '["amenity"="bar"]',
+    '["amenity"="pub"]',
+    '["craft"="brewery"]',
+  ],
   "Wi‑Fi & Cell": ['["internet_access"="wlan"]'],
   "Dog Needs": ['["dog"="yes"]'],
   Power: ['["amenity"="charging_station"]'],
@@ -45,7 +52,7 @@ const GOOGLE_TYPES: Record<string, string> = {
   Fuel: "gas_station",
   Laundry: "laundry",
   Adventure: "park",
-  Wine: "liquor_store",
+  "Adult-friendly": "bar",
   Power: "electric_vehicle_charging_station",
 };
 
@@ -57,7 +64,7 @@ const ICONS: Record<string, string> = {
   Shower: "🚿",
   Laundry: "🧺",
   Adventure: "🏞️",
-  Wine: "🍷",
+  "Adult-friendly": "🍷",
   "Wi‑Fi & Cell": "📶",
   "Dog Needs": "🐾",
   Power: "⚡",
@@ -108,7 +115,9 @@ function helpsFromGoogleTypes(types: string[] = []): string[] {
     if (t === "gas_station") found.add("Fuel");
     if (t === "laundry") found.add("Laundry");
     if (["park", "campground", "natural_feature"].includes(t)) found.add("Adventure");
-    if (["liquor_store", "bar", "winery"].includes(t)) found.add("Wine");
+    if (["liquor_store", "bar", "winery", "night_club"].includes(t) || t.includes("brew")) {
+      found.add("Adult-friendly");
+    }
     if (t === "cafe") found.add("Wi‑Fi & Cell");
     if (t === "electric_vehicle_charging_station") found.add("Power");
     if (t === "pet_store") found.add("Dog Needs");
@@ -341,7 +350,7 @@ function fallbackPlaces(area: string, exclude: string[]): NearbyPlace[] {
           lat: 38.8706,
           lng: -107.612,
           icon: "🍷",
-          helpsWith: ["Wine", "Adventure"],
+          helpsWith: ["Adult-friendly", "Adventure"],
           description:
             "High-mesa tasting room above Paonia. Listed as a wine stop — not scout-verified in ROMI yet.",
           note: "Confirm hours and the drive up. A scout has not filed a ROMI report.",
@@ -355,7 +364,7 @@ function fallbackPlaces(area: string, exclude: string[]): NearbyPlace[] {
           lat: 38.873,
           lng: -107.62,
           icon: "🍷",
-          helpsWith: ["Wine", "Food", "Adventure"],
+          helpsWith: ["Adult-friendly", "Food", "Adventure"],
           description:
             "Winery and views west of town. Map/Google listing only until a scout goes.",
           note: "Seasonal tasting hours. Not scout-verified.",

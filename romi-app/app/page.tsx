@@ -448,6 +448,7 @@ export default function Home() {
     return pool
       .filter((place) => !flagged.has(place.id))
       .filter((place) => !realStops.some((stop) => isSamePlace(stop.name, place.name)))
+      .filter((place) => inRadius(place))
       .filter((place) => {
         if (selectedNeeds.length === 0 || !place.helpsWith?.length) return true;
         return place.helpsWith.some((need) => selectedNeeds.includes(need));

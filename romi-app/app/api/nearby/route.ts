@@ -124,7 +124,7 @@ function helpsFromGoogleTypes(types: string[] = []): string[] {
     }
     if (t === "cafe") found.add("Wi‑Fi & Cell");
     if (t === "electric_vehicle_charging_station") found.add("Power");
-    if (t === "pet_store") found.add("Dog Needs");
+    if (t === "pet_store" || t === "veterinary_care" || t === "dog_park") found.add("Dog Needs");
   }
   return [...found];
 }
@@ -178,7 +178,12 @@ const NEED_QUERIES: Record<string, Array<{ type: string; keyword: string }>> = {
     { type: "campground", keyword: "potable water fill" },
     { type: "rv_park", keyword: "water fill" },
   ],
-  "Dog Needs": [{ type: "park", keyword: "dog park pet" }],
+  "Dog Needs": [
+    { type: "park", keyword: "dog park" },
+    { type: "pet_store", keyword: "pet store dog" },
+    { type: "veterinary_care", keyword: "veterinarian" },
+    { type: "restaurant", keyword: "dog friendly patio" },
+  ],
   "Wi‑Fi & Cell": [{ type: "cafe", keyword: "wifi" }],
 };
 
@@ -283,21 +288,39 @@ async function fromGoogle(
 
   const center = centerFor(area, origin?.lat, origin?.lng, origin?.radius);
   const selected = needs.length > 0 ? needs : extra ? [] : ["Food", "Fuel", "Sleep"];
-  const queries = selected.flatMap((need) => NEED_QUERIES[need] || [{ type: "point_of_interest", keyword: need }]);
+  const queries: Array<{ type: string; keyword: string; need?: string }> = selected.flatMap((need) =>
+    (NEED_QUERIES[need] || [{ type: "point_of_interest", keyword: need }]).map((query) => ({
+      ...query,
+      need,
+    })),
+  );
   const phrase = (extra || "").trim().slice(0, 80);
   if (phrase) {
-    queries.unshift({ type: "point_of_interest", keyword: phrase });
+    queries.unshift({ type: "point_of_interest", keyword: phrase, need: selected[0] });
     if (selected.includes("Adult-friendly") || /bar|beer|wine|golf|brew|cart/i.test(phrase)) {
-      queries.unshift({ type: "bar", keyword: phrase });
-      queries.unshift({ type: "tourist_attraction", keyword: phrase });
+      queries.unshift({ type: "bar", keyword: phrase, need: "Adult-friendly" });
+      queries.unshift({ type: "tourist_attraction", keyword: phrase, need: "Adult-friendly" });
     }
     if (selected.includes("Adventure") || /hike|trail|jeep|atv|raft/i.test(phrase)) {
-      queries.unshift({ type: "park", keyword: phrase });
+      queries.unshift({ type: "park", keyword: phrase, need: "Adventure" });
+    }
+    if (selected.includes("Dog Needs") || /dog|pup|vet|leash/i.test(phrase)) {
+      queries.unshift({ type: "park", keyword: phrase, need: "Dog Needs" });
+      queries.unshift({ type: "pet_store", keyword: phrase, need: "Dog Needs" });
     }
   }
 
+  const idToNeeds = new Map<string, Set<string>>();
   const idSets = await Promise.all(
-    queries.map((query) => nearbyIdsFor(center, query.type, query.keyword, key)),
+    queries.map(async (query) => {
+      const foundIds = await nearbyIdsFor(center, query.type, query.keyword, key);
+      for (const id of foundIds) {
+        const set = idToNeeds.get(id) || new Set<string>();
+        if (query.need) set.add(query.need);
+        idToNeeds.set(id, set);
+      }
+      return foundIds;
+    }),
   );
   const seen = new Set<string>();
   const ids: string[] = [];
@@ -337,7 +360,12 @@ async function fromGoogle(
       ),
     )
     .map((place) => {
-      const helpsWith = helpsFromGoogleTypes(place.types);
+      const helpsWith = [
+        ...new Set([
+          ...helpsFromGoogleTypes(place.types),
+          ...(idToNeeds.get(place.placeId) || []),
+        ]),
+      ];
       const primaryNeed = selected.find((need) => helpsWith.includes(need)) || helpsWith[0] || selected[0];
       const hoursToday = todayHours(place.opening_hours?.weekday_text, place.opening_hours?.open_now);
       const hoursFull = (place.opening_hours?.weekday_text || []).join("\n");

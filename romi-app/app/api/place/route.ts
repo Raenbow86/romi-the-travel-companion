@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         rating?: number;
         user_ratings_total?: number;
         types?: string[];
-        opening_hours?: { weekday_text?: string[] };
+        opening_hours?: { weekday_text?: string[]; open_now?: boolean };
         reviews?: Array<{ text?: string }>;
       };
     };
@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     if (!r?.name || !r.geometry?.location) {
       return NextResponse.json({ error: "not-found" }, { status: 200 });
     }
+    const week = r.opening_hours?.weekday_text || [];
     return NextResponse.json({
       place: {
         id,
@@ -42,8 +43,8 @@ export async function GET(request: NextRequest) {
         website: r.website,
         rating: r.rating,
         reviewCount: r.user_ratings_total,
-        hours: r.opening_hours?.weekday_text?.slice(0, 2).join(" · "),
-        reviewSnippet: r.reviews?.[0]?.text?.replace(/\s+/g, " ").slice(0, 220),
+        hours: week.slice(0, 2).join(" · "),
+        hoursFull: week.join("\n"),
         icon: "📍",
         helpsWith: [],
         source: "google",

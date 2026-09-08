@@ -1041,7 +1041,7 @@ export default function Home() {
     setPlaceReviews((cur) => [next, ...cur]);
     setReviewStars(0);
     setReviewText("");
-    setReviewThanks("Thank you. No points — just a bigger picture for the next traveler.");
+    setReviewThanks("Thank you.");
     window.setTimeout(() => setReviewThanks(""), 4000);
   }
 
@@ -1074,6 +1074,11 @@ export default function Home() {
         onClick={() => {
           setHighlightedId(place.id);
           setExpandedId(open ? null : place.id);
+          if (!open) {
+            setReviewStars(0);
+            setReviewText("");
+            setReviewThanks("");
+          }
         }}
         className={`cursor-pointer rounded-3xl bg-white p-4 shadow-sm ring-1 ${
           highlightedId === place.id ? "ring-2 ring-orange-500" : "ring-amber-100"
@@ -1151,7 +1156,7 @@ export default function Home() {
             onClick={(event) => event.stopPropagation()}
           >
             <p className="text-sm font-black text-teal-900">Traveler reviews</p>
-            <p className="mt-1 text-xs text-slate-500">No points. Just a bigger picture for the next person.</p>
+            <p className="mt-1 text-xs text-slate-500">Stars and a note. No points.</p>
             {reviewsFor(place.id, place.name).length === 0 ? (
               <p className="mt-2 text-sm text-slate-600">None yet. Be the first.</p>
             ) : (

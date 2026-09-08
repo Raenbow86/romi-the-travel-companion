@@ -310,6 +310,8 @@ export default function Home() {
   const [pullThrough, setPullThrough] = useState("unsure");
   const [reportDogs, setReportDogs] = useState("unsure");
   const [hoursSeen, setHoursSeen] = useState("");
+  const [googleHours, setGoogleHours] = useState("");
+  const [hoursOk, setHoursOk] = useState<"" | "yes" | "no">("");
   const [justSaved, setJustSaved] = useState<{ name: string; points: number } | null>(null);
   const [formError, setFormError] = useState("");
   const [googleWrong, setGoogleWrong] = useState(false);
@@ -723,6 +725,7 @@ export default function Home() {
       setReportArea(data.place.area || hit.area);
       setTownLocked(true);
       setNameLocked(true);
+      useGoogleHours(data.place.hours, data.place.hoursFull);
       if (data.place.lat && data.place.lng) {
         setPinLat(data.place.lat);
         setPinLng(data.place.lng);
@@ -792,7 +795,22 @@ export default function Home() {
     setBriefDraft("");
   }
 
-  function startPlaceReport(prefill?: { name?: string; area?: string; lat?: number; lng?: number }) {
+  function useGoogleHours(hours?: string, hoursFull?: string) {
+    const full = (hoursFull || hours || "").trim();
+    setGoogleHours(full);
+    setHoursOk("");
+    setHoursSeen("");
+  }
+
+  async function startPlaceReport(prefill?: {
+    name?: string;
+    area?: string;
+    lat?: number;
+    lng?: number;
+    id?: string;
+    hours?: string;
+    hoursFull?: string;
+  }) {
     setReportName(prefill?.name || "");
     setReportArea(prefill?.area || origin?.label || "");
     setReportNeeds(selectedNeeds);
@@ -801,7 +819,7 @@ export default function Home() {
     setBeenThere("yes");
     setPullThrough("unsure");
     setReportDogs("unsure");
-    setHoursSeen("");
+    useGoogleHours(prefill?.hours, prefill?.hoursFull);
     setJustSaved(null);
     setFormError("");
     setGoogleWrong(false);
@@ -821,6 +839,17 @@ export default function Home() {
       setPinStatus("idle");
     }
     setScreen("report");
+    const googleId = prefill?.id && prefill.id.startsWith("ChIJ") ? prefill.id : "";
+    if (googleId && !(prefill?.hoursFull || prefill?.hours)) {
+      void fetch(`/api/place?id=${encodeURIComponent(googleId)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.place?.hoursFull || data.place?.hours) {
+            useGoogleHours(data.place.hours, data.place.hoursFull);
+          }
+        })
+        .catch(() => {});
+    }
   }
 
   async function savePlaceReport(event: FormEvent<HTMLFormElement>) {
@@ -881,6 +910,8 @@ export default function Home() {
     setReportNotes("");
     setReturnAgain("");
     setHoursSeen("");
+    setGoogleHours("");
+    setHoursOk("");
     setPullThrough("unsure");
     setReportDogs("unsure");
     setBeenThere("yes");
@@ -1083,7 +1114,15 @@ export default function Home() {
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                startPlaceReport({ name: place.name, area: place.area, lat: place.lat, lng: place.lng });
+                void startPlaceReport({
+                  name: place.name,
+                  area: place.area,
+                  lat: place.lat,
+                  lng: place.lng,
+                  id: place.id,
+                  hours: place.hours,
+                  hoursFull: place.hoursFull,
+                });
               }}
               className="rounded-full bg-orange-600 px-4 py-3 text-sm font-bold text-white"
             >
@@ -1299,15 +1338,48 @@ export default function Home() {
                 ))}
               </div>
             </fieldset>
-            <label className="block">
-              <span className="text-sm font-bold">Hours you saw</span>
-              <input
-                value={hoursSeen}
-                onChange={(e) => setHoursSeen(e.target.value)}
-                placeholder="Open at 7, kitchen until 2…"
-                className="mt-1 w-full rounded-2xl border border-amber-200 px-4 py-3"
-              />
-            </label>
+            <fieldset>
+              <legend className="text-sm font-bold">Hours</legend>
+              {googleHours ? (
+                <>
+                  <p className="mt-2 whitespace-pre-line rounded-2xl bg-white p-4 text-sm text-slate-700 ring-1 ring-amber-100">
+                    {googleHours}
+                  </p>
+                  <p className="mt-2 text-sm font-bold">Are these hours right?</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(["yes", "no"] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => {
+                          setHoursOk(opt);
+                          setHoursSeen(googleHours);
+                        }}
+                        className={`rounded-full px-3 py-2 text-sm font-bold capitalize ${
+                          hoursOk === opt ? "bg-teal-700 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  {hoursOk === "no" ? (
+                    <textarea
+                      value={hoursSeen}
+                      onChange={(e) => setHoursSeen(e.target.value)}
+                      className="mt-3 h-32 w-full rounded-2xl border border-amber-200 px-4 py-3"
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <textarea
+                  value={hoursSeen}
+                  onChange={(e) => setHoursSeen(e.target.value)}
+                  placeholder="What was open when you were there"
+                  className="mt-2 h-28 w-full rounded-2xl border border-amber-200 px-4 py-3"
+                />
+              )}
+            </fieldset>
             <fieldset>
               <legend className="text-sm font-bold">Would you go back?</legend>
               <div className="mt-2 flex flex-wrap gap-2">

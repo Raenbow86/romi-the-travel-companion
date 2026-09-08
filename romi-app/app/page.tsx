@@ -246,6 +246,15 @@ type TravelerReport = {
 
 type Origin = { label: string; lat: number; lng: number };
 
+type PlaceReview = {
+  id: string;
+  placeId: string;
+  placeName: string;
+  stars: number;
+  text: string;
+  at: number;
+};
+
 function compactName(value: string) {
   return value
     .toLowerCase()
@@ -314,6 +323,10 @@ export default function Home() {
   const [hoursOk, setHoursOk] = useState<"" | "yes" | "no">("");
   const [justSaved, setJustSaved] = useState<{ name: string; points: number } | null>(null);
   const [formError, setFormError] = useState("");
+  const [placeReviews, setPlaceReviews] = useState<PlaceReview[]>([]);
+  const [reviewStars, setReviewStars] = useState(0);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewThanks, setReviewThanks] = useState("");
   const [googleWrong, setGoogleWrong] = useState(false);
   const [pinStatus, setPinStatus] = useState<"idle" | "pinning" | "pinned" | "denied">("idle");
   const [pinLat, setPinLat] = useState<number | null>(null);
@@ -356,6 +369,11 @@ export default function Home() {
         const parsed = JSON.parse(flagsRaw);
         if (Array.isArray(parsed)) setFlaggedPlaces(parsed);
       }
+      const reviewsRaw = window.localStorage.getItem("romi-place-reviews");
+      if (reviewsRaw) {
+        const parsed = JSON.parse(reviewsRaw);
+        if (Array.isArray(parsed)) setPlaceReviews(parsed);
+      }
       const originRaw = window.localStorage.getItem("romi-origin");
       if (originRaw) {
         const parsed = JSON.parse(originRaw) as Origin;
@@ -378,11 +396,12 @@ export default function Home() {
       window.localStorage.setItem("romi-saved-days", JSON.stringify(savedDays));
       window.localStorage.setItem("romi-scout-points", String(scoutPoints));
       window.localStorage.setItem("romi-flagged-places", JSON.stringify(flaggedPlaces));
+      window.localStorage.setItem("romi-place-reviews", JSON.stringify(placeReviews));
       if (origin) window.localStorage.setItem("romi-origin", JSON.stringify(origin));
     } catch {
       // ignore
     }
-  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, flaggedPlaces, hasLoadedReports]);
+  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, flaggedPlaces, placeReviews, hasLoadedReports]);
 
   useEffect(() => {
     if (!origin) {
@@ -996,6 +1015,36 @@ export default function Home() {
     );
   }
 
+  function reviewsFor(placeId: string, placeName: string) {
+    return placeReviews.filter(
+      (r) => r.placeId === placeId || isSamePlace(r.placeName, placeName),
+    );
+  }
+
+  function travelerScore(placeId: string, placeName: string) {
+    const list = reviewsFor(placeId, placeName);
+    if (!list.length) return null;
+    const avg = list.reduce((sum, r) => sum + r.stars, 0) / list.length;
+    return { avg: Math.round(avg * 10) / 10, count: list.length };
+  }
+
+  function addReview(placeId: string, placeName: string) {
+    if (reviewStars < 1) return;
+    const next: PlaceReview = {
+      id: `${Date.now()}`,
+      placeId,
+      placeName,
+      stars: reviewStars,
+      text: reviewText.trim(),
+      at: Date.now(),
+    };
+    setPlaceReviews((cur) => [next, ...cur]);
+    setReviewStars(0);
+    setReviewText("");
+    setReviewThanks("Thank you. No points — just a bigger picture for the next traveler.");
+    window.setTimeout(() => setReviewThanks(""), 4000);
+  }
+
   function renderCard(place: {
     id: string;
     name: string;
@@ -1040,13 +1089,19 @@ export default function Home() {
             <p className="text-xs font-semibold text-slate-500">📍 {place.area}</p>
           </div>
         </div>
-        {(place.rating || place.hours) && (
-          <p className="mt-2 text-sm font-bold text-teal-800">
-            {place.rating ? `★ ${place.rating}${place.reviewCount ? ` (${place.reviewCount})` : ""}` : ""}
-            {place.rating && place.hours ? " · " : ""}
-            {place.hours ? `🕒 ${place.hours}` : ""}
-          </p>
-        )}
+        {(() => {
+          const romi = travelerScore(place.id, place.name);
+          if (!romi && !place.rating && !place.hours) return null;
+          return (
+            <p className="mt-2 text-sm font-bold text-teal-800">
+              {romi ? `Travelers ★ ${romi.avg} (${romi.count})` : ""}
+              {romi && (place.rating || place.hours) ? " · " : ""}
+              {place.rating && !romi ? `Google ★ ${place.rating}${place.reviewCount ? ` (${place.reviewCount})` : ""}` : ""}
+              {place.rating && !romi && place.hours ? " · " : ""}
+              {place.hours ? `🕒 ${place.hours}` : ""}
+            </p>
+          );
+        })()}
         {place.helpsWith && place.helpsWith.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {place.helpsWith.map((need) => (
@@ -1089,6 +1144,55 @@ export default function Home() {
           >
             Website →
           </a>
+        ) : null}
+        {open && status === "verified" ? (
+          <div
+            className="mt-4 rounded-2xl bg-teal-50 p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm font-black text-teal-900">Traveler reviews</p>
+            <p className="mt-1 text-xs text-slate-500">No points. Just a bigger picture for the next person.</p>
+            {reviewsFor(place.id, place.name).length === 0 ? (
+              <p className="mt-2 text-sm text-slate-600">None yet. Be the first.</p>
+            ) : (
+              <ul className="mt-3 space-y-3">
+                {reviewsFor(place.id, place.name).map((rev) => (
+                  <li key={rev.id} className="text-sm text-slate-700">
+                    <p className="font-bold text-teal-800">{"★".repeat(rev.stars)}{"☆".repeat(5 - rev.stars)}</p>
+                    {rev.text ? <p className="mt-1 leading-5">{rev.text}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-4 text-sm font-bold">Your stars</p>
+            <div className="mt-2 flex gap-1">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setReviewStars(n)}
+                  className={`text-2xl ${n <= reviewStars ? "text-orange-500" : "text-slate-300"}`}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+              placeholder="What was it actually like"
+              className="mt-3 h-24 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => addReview(place.id, place.name)}
+              disabled={reviewStars < 1}
+              className="mt-3 w-full rounded-full bg-teal-700 py-3 text-sm font-bold text-white disabled:opacity-40"
+            >
+              Add review
+            </button>
+            {reviewThanks ? <p className="mt-2 text-sm font-semibold text-teal-800">{reviewThanks}</p> : null}
+          </div>
         ) : null}
         <p className="mt-3 text-sm font-bold text-orange-700">
           {open ? "Show less" : "Read more"}

@@ -32,23 +32,29 @@ export async function GET(request: NextRequest) {
   const q = (request.nextUrl.searchParams.get("q") || "").trim();
   const lat = request.nextUrl.searchParams.get("lat");
   const lng = request.nextUrl.searchParams.get("lng");
-  const radius = request.nextUrl.searchParams.get("radius") || "32000";
+  const radius = request.nextUrl.searchParams.get("radius") || "80000";
   const key = process.env.GOOGLE_PLACES_API_KEY;
-  if (!key || q.length < 2 || !lat || !lng) {
+  if (!key || q.length < 2) {
     return NextResponse.json({ places: [] as SearchPlace[] });
   }
 
   try {
-    const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
-    url.searchParams.set("keyword", q);
-    url.searchParams.set("location", `${lat},${lng}`);
-    url.searchParams.set("radius", radius);
+    // Text search finds a named place ("Three Rivers Resort") even if
+    // the traveler's current pin is a town away. Nearby keyword search was
+    // missing Almont stops when someone searched from Salida/Gunnison.
+    const url = new URL("https://maps.googleapis.com/maps/api/place/textsearch/json");
+    url.searchParams.set("query", q);
     url.searchParams.set("key", key);
+    if (lat && lng) {
+      url.searchParams.set("location", `${lat},${lng}`);
+      url.searchParams.set("radius", radius);
+    }
 
     const response = await fetch(url.toString(), { cache: "no-store" });
     if (!response.ok) return NextResponse.json({ places: [] as SearchPlace[] });
 
     const data = (await response.json()) as {
+      status?: string;
       results?: Array<{
         place_id?: string;
         name?: string;
@@ -75,7 +81,7 @@ export async function GET(request: NextRequest) {
         icon: iconFor(r.types),
       }));
 
-    return NextResponse.json({ places, source: "google" });
+    return NextResponse.json({ places, source: "google", status: data.status || "OK" });
   } catch {
     return NextResponse.json({ places: [] as SearchPlace[] });
   }

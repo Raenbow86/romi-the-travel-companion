@@ -26,32 +26,6 @@ function loadLeaflet(): Promise<void> {
       document.head.appendChild(css);
     }
 
-    if (!document.getElementById("romi-pin-style")) {
-      const style = document.createElement("style");
-      style.id = "romi-pin-style";
-      style.textContent = `
-        .romi-pin { background: transparent !important; border: none !important; }
-        .romi-pin-face {
-          width: 44px;
-          height: 44px;
-          border-radius: 999px;
-          background: #fff7ed;
-          border: 3px solid #0f766e;
-          display: grid;
-          place-items: center;
-          font-size: 24px;
-          line-height: 1;
-          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.28);
-        }
-        .romi-pin-face.google {
-          border-color: #ea580c;
-          border-style: dashed;
-          background: #fff;
-        }
-      `;
-      document.head.appendChild(style);
-    }
-
     const script = document.createElement("script");
     script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
     script.async = true;
@@ -75,7 +49,7 @@ export function RomiMap({
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
 
-  const key = stops.map((s) => `${s.id}:${s.icon}:${s.kind || ""}`).join("|");
+  const key = stops.map((s) => `${s.id}:${s.kind || ""}:${s.lat}:${s.lng}`).join("|");
 
   useEffect(() => {
     let cancelled = false;
@@ -97,15 +71,14 @@ export function RomiMap({
       }).addTo(map);
 
       const points = stops.map((stop) => {
-        const picture = L.divIcon({
-          className: "romi-pin",
-          html: `<div class="romi-pin-face ${stop.kind === "google" ? "google" : ""}">${stop.icon}</div>`,
-          iconSize: [44, 44],
-          iconAnchor: [22, 22],
-          popupAnchor: [0, -22],
-        });
-
-        const marker = L.marker([stop.lat, stop.lng], { icon: picture }).addTo(map);
+        const color = stop.kind === "google" ? "#ea580c" : "#0f766e";
+        const marker = L.circleMarker([stop.lat, stop.lng], {
+          radius: 9,
+          color: "#ffffff",
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 1,
+        }).addTo(map);
         marker.on("click", () => {
           selectRef.current(stop.id);
         });
@@ -148,7 +121,7 @@ export function RomiMap({
           </p>
           <h3 className="px-5 text-xl font-black text-slate-900">Tap a pin for the card</h3>
           <p className="px-5 pb-3 text-sm text-slate-600">
-            Teal solid = scout verified. Orange dashed = Google lead.
+            Teal = scout verified. Orange = Google lead.
           </p>
         </>
       ) : null}
@@ -167,11 +140,10 @@ type LeafletLike = {
     fitBounds: (b: unknown, o: unknown) => void;
   };
   tileLayer: (url: string, opts: Record<string, unknown>) => { addTo: (m: unknown) => void };
-  marker: (
+  circleMarker: (
     latlng: [number, number],
     opts: Record<string, unknown>,
   ) => LeafletMarker & { addTo: (m: unknown) => LeafletMarker };
-  divIcon: (opts: Record<string, unknown>) => unknown;
   latLngBounds: (pts: [number, number][]) => unknown;
 };
 

@@ -1185,7 +1185,7 @@ export default function Home() {
             <textarea
               value={reviewText}
               onChange={(e) => setReviewText(e.target.value)}
-              placeholder="What was it actually like"
+              placeholder="Campsite 10 was quiet. Number 1 sat by the dumpsters…"
               className="mt-3 h-24 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm"
             />
             <button

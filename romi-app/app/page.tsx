@@ -311,6 +311,7 @@ export default function Home() {
   const [reportDogs, setReportDogs] = useState("unsure");
   const [hoursSeen, setHoursSeen] = useState("");
   const [justSaved, setJustSaved] = useState<{ name: string; points: number } | null>(null);
+  const [formError, setFormError] = useState("");
   const [googleWrong, setGoogleWrong] = useState(false);
   const [pinStatus, setPinStatus] = useState<"idle" | "pinning" | "pinned" | "denied">("idle");
   const [pinLat, setPinLat] = useState<number | null>(null);
@@ -802,6 +803,7 @@ export default function Home() {
     setReportDogs("unsure");
     setHoursSeen("");
     setJustSaved(null);
+    setFormError("");
     setGoogleWrong(false);
     setPlaceHits([]);
     setTownHits([]);
@@ -821,10 +823,36 @@ export default function Home() {
     setScreen("report");
   }
 
-  function savePlaceReport(event: FormEvent<HTMLFormElement>) {
+  async function savePlaceReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!reportName.trim() || !reportArea.trim()) return;
-    if (beenThere !== "yes") return;
+    if (!reportName.trim() || !reportArea.trim()) {
+      setFormError("Need the place name and the town.");
+      return;
+    }
+    if (beenThere !== "yes") {
+      setFormError("Only scout a place you actually went.");
+      return;
+    }
+    setFormError("");
+    let lat = pinLat;
+    let lng = pinLng;
+    if (lat == null || lng == null) {
+      try {
+        const res = await fetch(
+          `/api/geocode?q=${encodeURIComponent(`${reportName.trim()} ${reportArea.trim()}`)}`,
+        );
+        const data = await res.json();
+        if (data.lat && data.lng) {
+          lat = data.lat;
+          lng = data.lng;
+          setPinLat(data.lat);
+          setPinLng(data.lng);
+          setPinStatus("pinned");
+        }
+      } catch {
+        // keep going — the report still sends
+      }
+    }
     const notes = reportNotes.trim();
     const points = 10 + (notes.length > 12 ? 10 : 0) + (googleWrong ? 5 : 0);
     const newReport: TravelerReport = {
@@ -859,6 +887,11 @@ export default function Home() {
     setGoogleWrong(false);
     setTownHits([]);
     setPlaceHits([]);
+    setNameLocked(false);
+    setTownLocked(false);
+    setPinLat(null);
+    setPinLng(null);
+    setPinStatus("idle");
   }
 
   function pinHere() {
@@ -872,7 +905,6 @@ export default function Home() {
         setPinLat(pos.coords.latitude);
         setPinLng(pos.coords.longitude);
         setPinStatus("pinned");
-        if (!reportArea.trim() && origin?.label) setReportArea(origin.label);
       },
       () => setPinStatus("denied"),
       { enableHighAccuracy: true, timeout: 12000 },
@@ -1097,69 +1129,24 @@ export default function Home() {
   }
 
   if (screen === "report") {
-    const noteWords = [
-      "pull-through",
-      "muddy",
-      "burger",
-      "leash",
-      "shower",
-      "dump",
-      "quiet",
-      "switchbacks",
-      "cash only",
-      "closes early",
-    ];
     return (
       <main className="min-h-screen bg-amber-50 px-5 py-8 pb-28 text-slate-800">
         <section className="mx-auto max-w-md">
           <button type="button" onClick={() => setScreen("home")} className="text-sm font-bold text-teal-700">
             ← Explore
           </button>
-          <p className="mt-6 text-xs font-bold tracking-[0.16em] text-teal-700">FOUNDING SCOUTS</p>
-          <h1 className="mt-2 text-4xl font-black">You’re here. Scout it.</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Fill this while you’re standing there. Honest notes beat Google. Angela reads every one before it goes
-            teal.
-          </p>
+          <p className="mt-6 text-xs font-bold tracking-[0.16em] text-teal-700">SCOUTS</p>
+          <h1 className="mt-2 text-4xl font-black">Scout it.</h1>
           {justSaved ? (
             <p className="mt-5 rounded-3xl bg-teal-50 p-4 text-sm font-semibold text-teal-900">
               Sent {justSaved.name}. Pending Angela’s review — not teal yet.
             </p>
           ) : null}
 
-          <form onSubmit={savePlaceReport} className="mt-8 space-y-5">
-            <div className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
-              <p className="text-sm font-black">This spot</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Pin where you are so the next tired traveler can find the same dirt.
-              </p>
-              <button
-                type="button"
-                onClick={pinHere}
-                className={`mt-3 rounded-full px-4 py-3 text-sm font-bold ${
-                  pinStatus === "pinned" ? "bg-teal-700 text-white" : "border border-teal-700 text-teal-700"
-                }`}
-              >
-                {pinStatus === "pinning"
-                  ? "Finding you…"
-                  : pinStatus === "pinned"
-                    ? "Pinned this spot"
-                    : pinStatus === "denied"
-                      ? "Location blocked — type the town"
-                      : "I’m here — pin it"}
-              </button>
-              {pinLat != null && pinLng != null ? (
-                <p className="mt-2 text-xs text-slate-500">
-                  {pinLat.toFixed(5)}, {pinLng.toFixed(5)}
-                </p>
-              ) : null}
-            </div>
-
+          <form onSubmit={(e) => void savePlaceReport(e)} className="mt-8 space-y-5">
             <label className="relative block">
               <span className="text-sm font-bold">Place name</span>
-              <p className="text-xs text-slate-500">Start typing. Tap the real name so nobody misspells it.</p>
               <input
-                required
                 value={reportName}
                 onChange={(e) => {
                   setNameLocked(false);
@@ -1167,7 +1154,7 @@ export default function Home() {
                 }}
                 onFocus={() => setNameFocused(true)}
                 onBlur={() => window.setTimeout(() => setNameFocused(false), 220)}
-                placeholder="Three Rivers, Powerstop, Bread Works…"
+                placeholder="Place name"
                 autoComplete="off"
                 className="mt-1 w-full rounded-2xl border border-amber-200 px-4 py-3"
               />
@@ -1191,10 +1178,8 @@ export default function Home() {
               )}
             </label>
             <label className="relative block">
-              <span className="text-sm font-bold">Town / location</span>
-              <p className="text-xs text-slate-500">Type Al… then tap Almont, Colorado. Don’t guess the ZIP.</p>
+              <span className="text-sm font-bold">Town</span>
               <input
-                required
                 value={reportArea}
                 onChange={(e) => {
                   setTownLocked(false);
@@ -1202,7 +1187,7 @@ export default function Home() {
                 }}
                 onFocus={() => setTownFocused(true)}
                 onBlur={() => window.setTimeout(() => setTownFocused(false), 220)}
-                placeholder="Almont, Gunnison, Paonia…"
+                placeholder="Town"
                 autoComplete="off"
                 className="mt-1 w-full rounded-2xl border border-amber-200 px-4 py-3"
               />
@@ -1222,11 +1207,25 @@ export default function Home() {
                 </div>
               )}
             </label>
+            <div className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
+              <p className="text-sm font-black">Pin</p>
+              {pinLat != null && pinLng != null ? (
+                <p className="mt-1 text-sm text-teal-800">
+                  Pinned to this place · {pinLat.toFixed(5)}, {pinLng.toFixed(5)}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">Pick the place from the list to pin it.</p>
+              )}
+              <button
+                type="button"
+                onClick={pinHere}
+                className="mt-3 rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600"
+              >
+                {pinStatus === "pinning" ? "Finding you…" : "I am standing here now"}
+              </button>
+            </div>
             <fieldset>
               <legend className="text-sm font-bold">What it actually helps with</legend>
-              <p className="mt-1 text-xs text-slate-500">
-                Only what is true here. Fuel and food together is allowed. A glass shop is not a shower.
-              </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {needs.map((need) => {
                   const on = reportNeeds.includes(need.label);
@@ -1251,7 +1250,6 @@ export default function Home() {
             </fieldset>
             <fieldset>
               <legend className="text-sm font-bold">I was there</legend>
-              <p className="mt-1 text-xs text-slate-500">Founding scouts only report places they physically went.</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {["yes", "no"].map((opt) => (
                   <button
@@ -1269,7 +1267,6 @@ export default function Home() {
             </fieldset>
             <fieldset>
               <legend className="text-sm font-bold">Pull-through</legend>
-              <p className="mt-1 text-xs text-slate-500">Can a trailer get in and out without backing a nightmare?</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {["yes", "tight", "no", "unsure"].map((opt) => (
                   <button
@@ -1304,7 +1301,6 @@ export default function Home() {
             </fieldset>
             <label className="block">
               <span className="text-sm font-bold">Hours you saw</span>
-              <p className="text-xs text-slate-500">What was open when you were there — not what Google says.</p>
               <input
                 value={hoursSeen}
                 onChange={(e) => setHoursSeen(e.target.value)}
@@ -1330,33 +1326,16 @@ export default function Home() {
               </div>
             </fieldset>
             <label className="block">
-              <span className="text-sm font-bold">What it was actually like</span>
-              <p className="text-xs text-slate-500">The gold. These words are searchable. Tap a word to drop it in.</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {noteWords.map((word) => (
-                  <button
-                    key={word}
-                    type="button"
-                    onClick={() => {
-                      if (reportNotes.toLowerCase().includes(word.toLowerCase())) return;
-                      setReportNotes((cur) => (cur.trim() ? `${cur.trim()} ${word}` : word));
-                    }}
-                    className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-amber-100"
-                  >
-                    {word}
-                  </button>
-                ))}
-              </div>
+              <span className="text-sm font-bold">Notes</span>
               <textarea
                 value={reportNotes}
                 onChange={(e) => setReportNotes(e.target.value)}
-                placeholder="Fuel’s a little high. Locals are there for the burger."
-                className="mt-2 h-28 w-full rounded-2xl border border-amber-200 px-4 py-3"
+                placeholder="What it was actually like"
+                className="mt-1 h-28 w-full rounded-2xl border border-amber-200 px-4 py-3"
               />
             </label>
             <fieldset>
               <legend className="text-sm font-bold">Google had this wrong?</legend>
-              <p className="mt-1 text-xs text-slate-500">Flag a listing that does not belong.</p>
               <button
                 type="button"
                 onClick={() => setGoogleWrong((v) => !v)}
@@ -1367,14 +1346,13 @@ export default function Home() {
                 {googleWrong ? "Flagged — doesn’t belong" : "Flag it"}
               </button>
             </fieldset>
+            {formError ? <p className="text-sm font-semibold text-orange-700">{formError}</p> : null}
             <button
               type="submit"
-              disabled={beenThere !== "yes"}
-              className="w-full rounded-full bg-orange-600 py-4 font-bold text-white disabled:opacity-40"
+              className="w-full rounded-full bg-orange-600 py-4 font-bold text-white"
             >
               Send scout report
             </button>
-            <p className="text-center text-xs text-slate-500">Pending until Angela reviews. We don’t auto-verify.</p>
           </form>
 
           <h2 className="mt-10 text-xl font-black">Your reports</h2>

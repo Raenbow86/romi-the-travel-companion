@@ -246,22 +246,6 @@ type TravelerReport = {
 
 type Origin = { label: string; lat: number; lng: number };
 
-type PointGift = {
-  id: string;
-  toName: string;
-  toNote: string;
-  perk: string;
-  cost: number;
-  at: number;
-};
-
-const POINT_REWARDS = [
-  { cost: 50, perk: "Gift a 7-day Premium try", who: "A friend who hasn’t used ROMI yet" },
-  { cost: 150, perk: "30% off Premium for 2 months", who: "You" },
-  { cost: 400, perk: "Gift 1 month of Premium", who: "A friend" },
-  { cost: 1000, perk: "3 months of Premium", who: "You or a gift" },
-] as const;
-
 function compactName(value: string) {
   return value
     .toLowerCase()
@@ -327,11 +311,6 @@ export default function Home() {
   const [reportDogs, setReportDogs] = useState("unsure");
   const [hoursSeen, setHoursSeen] = useState("");
   const [justSaved, setJustSaved] = useState<{ name: string; points: number } | null>(null);
-  const [gifts, setGifts] = useState<PointGift[]>([]);
-  const [giftName, setGiftName] = useState("");
-  const [giftNote, setGiftNote] = useState("");
-  const [giftPerk, setGiftPerk] = useState<(typeof POINT_REWARDS)[number]["perk"]>(POINT_REWARDS[0].perk);
-  const [giftMsg, setGiftMsg] = useState("");
   const [googleWrong, setGoogleWrong] = useState(false);
   const [pinStatus, setPinStatus] = useState<"idle" | "pinning" | "pinned" | "denied">("idle");
   const [pinLat, setPinLat] = useState<number | null>(null);
@@ -370,11 +349,6 @@ export default function Home() {
         const parsed = JSON.parse(flagsRaw);
         if (Array.isArray(parsed)) setFlaggedPlaces(parsed);
       }
-      const giftsRaw = window.localStorage.getItem("romi-point-gifts");
-      if (giftsRaw) {
-        const parsed = JSON.parse(giftsRaw);
-        if (Array.isArray(parsed)) setGifts(parsed);
-      }
       const originRaw = window.localStorage.getItem("romi-origin");
       if (originRaw) {
         const parsed = JSON.parse(originRaw) as Origin;
@@ -397,12 +371,11 @@ export default function Home() {
       window.localStorage.setItem("romi-saved-days", JSON.stringify(savedDays));
       window.localStorage.setItem("romi-scout-points", String(scoutPoints));
       window.localStorage.setItem("romi-flagged-places", JSON.stringify(flaggedPlaces));
-      window.localStorage.setItem("romi-point-gifts", JSON.stringify(gifts));
       if (origin) window.localStorage.setItem("romi-origin", JSON.stringify(origin));
     } catch {
       // ignore
     }
-  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, flaggedPlaces, gifts, hasLoadedReports]);
+  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, flaggedPlaces, hasLoadedReports]);
 
   useEffect(() => {
     if (!origin) {
@@ -880,29 +853,6 @@ export default function Home() {
     );
   }
 
-  function sendGift(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const reward = POINT_REWARDS.find((r) => r.perk === giftPerk);
-    if (!reward || !giftName.trim()) return;
-    if (scoutPoints < reward.cost) {
-      setGiftMsg(`Need ${reward.cost} pts. You have ${scoutPoints}. Keep scouting.`);
-      return;
-    }
-    const gift: PointGift = {
-      id: `${Date.now()}`,
-      toName: giftName.trim(),
-      toNote: giftNote.trim(),
-      perk: reward.perk,
-      cost: reward.cost,
-      at: Date.now(),
-    };
-    setGifts((cur) => [gift, ...cur]);
-    setScoutPoints((n) => n - reward.cost);
-    setGiftName("");
-    setGiftNote("");
-    setGiftMsg(`Gift queued for ${gift.toName}. Angela sends the invite — not auto-magic yet.`);
-  }
-
   function saveThisDay() {
     if (!origin) return;
     const name = dayName.trim() || `${origin.label.split(",")[0]} day`;
@@ -1145,86 +1095,9 @@ export default function Home() {
             Fill this while you’re standing there. Honest notes beat Google. Angela reads every one before it goes
             teal.
           </p>
-          <p className="mt-3 text-sm">
-            <span className="font-black text-teal-800">{scoutPoints} pts</span>
-            <span className="text-slate-500"> · 10 for being there · +10 real notes · +5 if Google was wrong</span>
-          </p>
-
-          <section className="mt-5 rounded-3xl bg-teal-900 p-5 text-amber-50">
-            <p className="text-xs font-bold tracking-[0.16em] text-teal-200">THE FOUNDING FIVE</p>
-            <h2 className="mt-2 text-2xl font-black">Premium for life. That’s not points.</h2>
-            <p className="mt-2 text-sm leading-6 text-teal-100">
-              The first four or five people Angela names get ROMI’s AI Premium free for life when it ships.
-              That’s the honor. Points are extra — they turn into gifts and discounts you can hand to tired
-              friends who weren’t in that first circle.
-            </p>
-          </section>
-
-          <section className="mt-4 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-amber-100">
-            <h2 className="text-lg font-black">What points buy</h2>
-            <p className="mt-1 text-sm text-slate-600">Lots of points. Honest notes get you there faster than empty pins.</p>
-            <ul className="mt-3 space-y-2">
-              {POINT_REWARDS.map((row) => (
-                <li key={row.perk} className="flex items-start justify-between gap-3 text-sm">
-                  <span>
-                    <span className="font-bold text-teal-800">{row.cost} pts</span>
-                    <span className="text-slate-700"> · {row.perk}</span>
-                    <span className="block text-xs text-slate-500">{row.who}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <form onSubmit={sendGift} className="mt-4 space-y-3 rounded-3xl bg-orange-50 p-5 ring-1 ring-orange-100">
-            <h2 className="text-lg font-black">Gift points</h2>
-            <p className="text-sm text-slate-600">
-              Hand someone a Premium try even if they don’t have an account yet. Angela sends it. You can’t fake teal
-              — and you can’t fake a gift either.
-            </p>
-            <input
-              value={giftName}
-              onChange={(e) => setGiftName(e.target.value)}
-              placeholder="Friend’s name"
-              className="w-full rounded-2xl border border-amber-200 bg-white px-4 py-3"
-            />
-            <input
-              value={giftNote}
-              onChange={(e) => setGiftNote(e.target.value)}
-              placeholder="Email or how to reach them"
-              className="w-full rounded-2xl border border-amber-200 bg-white px-4 py-3"
-            />
-            <div className="flex flex-col gap-2">
-              {POINT_REWARDS.filter((r) => r.perk.toLowerCase().includes("gift") || r.cost === 1000).map((row) => (
-                <button
-                  key={row.perk}
-                  type="button"
-                  onClick={() => setGiftPerk(row.perk)}
-                  className={`rounded-full px-4 py-3 text-left text-sm font-bold ${
-                    giftPerk === row.perk ? "bg-orange-600 text-white" : "bg-white text-slate-700 ring-1 ring-amber-100"
-                  }`}
-                >
-                  {row.cost} pts · {row.perk}
-                </button>
-              ))}
-            </div>
-            <button type="submit" className="w-full rounded-full bg-orange-600 py-4 font-bold text-white">
-              Queue this gift
-            </button>
-            {giftMsg ? <p className="text-sm font-semibold text-teal-800">{giftMsg}</p> : null}
-            {gifts.length > 0 ? (
-              <ul className="space-y-2 pt-2">
-                {gifts.map((g) => (
-                  <li key={g.id} className="text-sm text-slate-600">
-                    <span className="font-bold text-slate-800">{g.toName}</span> · {g.perk} · −{g.cost} pts
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </form>
           {justSaved ? (
             <p className="mt-5 rounded-3xl bg-teal-50 p-4 text-sm font-semibold text-teal-900">
-              Sent {justSaved.name}. +{justSaved.points} pts. Pending Angela’s review — not teal yet.
+              Sent {justSaved.name}. Pending Angela’s review — not teal yet.
             </p>
           ) : null}
 
@@ -1447,7 +1320,7 @@ export default function Home() {
             </label>
             <fieldset>
               <legend className="text-sm font-bold">Google had this wrong?</legend>
-              <p className="mt-1 text-xs text-slate-500">+5 if you flag a listing that does not belong.</p>
+              <p className="mt-1 text-xs text-slate-500">Flag a listing that does not belong.</p>
               <button
                 type="button"
                 onClick={() => setGoogleWrong((v) => !v)}
@@ -1486,7 +1359,6 @@ export default function Home() {
                 <p className="mt-2 text-xs text-slate-500">
                   Go back: {report.returnAgain || "—"} · Dogs: {report.dogFriendly || "—"} · Pull-through:{" "}
                   {report.pullThrough || "—"}
-                  {report.points ? ` · +${report.points} pts` : ""}
                 </p>
               </article>
             ))

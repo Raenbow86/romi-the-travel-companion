@@ -1564,7 +1564,7 @@ export default function Home() {
         </p>
 
         {!viewingSavedDay && (
-          <form onSubmit={geocodeDraft} className="mt-6 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
+          <form onSubmit={geocodeDraft} className="relative z-30 mt-6 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
             <p className="text-xs font-bold tracking-[0.16em] text-orange-700">WHERE</p>
             <p className="mt-1 text-sm text-slate-600">
               Any town or ZIP. Same tools everywhere — not just our test towns.
@@ -1580,7 +1580,7 @@ export default function Home() {
                 Go
               </button>
               {areaSuggestions.length > 0 && (
-                <div className="absolute left-0 right-16 top-14 z-10 overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+                <div className="absolute left-0 right-16 top-14 z-[200] max-h-72 overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-amber-100">
                   {areaSuggestions.map((s) => (
                     <button
                       key={s.id}
@@ -1647,7 +1647,7 @@ export default function Home() {
         )}
 
         {!viewingSavedDay && (
-          <section className="mt-5 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
+          <section className="relative z-30 mt-5 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
             <p className="text-xs font-bold tracking-[0.16em] text-orange-700">FIND</p>
             <p className="mt-1 text-sm text-slate-600">
               Pick a need, then a specific. Vet means vets — not dog parks.
@@ -1746,7 +1746,7 @@ export default function Home() {
                   setBriefDraft("");
                 }
               }}
-              className="relative mt-4"
+              className="relative z-40 mt-4"
             >
               <input
                 value={placeSearch || briefDraft}
@@ -1759,13 +1759,13 @@ export default function Home() {
                 className="w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
               />
               {suggestions.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+                <div className="absolute left-0 right-0 top-14 z-[200] max-h-72 overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-amber-100">
                   {suggestions.map((s) => (
                     <button
                       key={s.id}
                       type="button"
                       onClick={() => pickSuggestion(s.id, s.name)}
-                      className="block w-full border-b border-amber-50 px-4 py-3 text-left last:border-0"
+                      className="block w-full border-b border-amber-50 bg-white px-4 py-3 text-left last:border-0"
                     >
                       <p className="font-bold text-slate-900">{s.name}</p>
                       <p className="text-xs text-slate-500">{s.area}</p>
@@ -1780,7 +1780,7 @@ export default function Home() {
           </section>
         )}
 
-        <div className="mt-5">
+        <div className="relative z-0 isolate mt-5 overflow-hidden rounded-3xl">
           <RomiMap
             compact
             stops={mapStops()}

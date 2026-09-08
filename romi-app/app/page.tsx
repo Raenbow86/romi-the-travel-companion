@@ -319,6 +319,10 @@ export default function Home() {
   const [placeHits, setPlaceHits] = useState<
     Array<{ id: string; name: string; area: string; gold?: boolean; lat?: number; lng?: number }>
   >([]);
+  const [nameFocused, setNameFocused] = useState(false);
+  const [townFocused, setTownFocused] = useState(false);
+  const [nameLocked, setNameLocked] = useState(false);
+  const [townLocked, setTownLocked] = useState(false);
   const [radiusMiles, setRadiusMiles] = useState(15);
   const radiusMeters = Math.round(radiusMiles * 1609);
 
@@ -473,8 +477,9 @@ export default function Home() {
 
   useEffect(() => {
     const q = reportArea.trim();
-    if (q.length < 2) {
-      setTownHits([]);
+    if (townLocked || !townFocused || q.length < 2) {
+      if (townLocked || !townFocused) setTownHits([]);
+      if (q.length < 2) setTownHits([]);
       return;
     }
     const timer = window.setTimeout(() => {
@@ -488,11 +493,11 @@ export default function Home() {
         .catch(() => setTownHits([]));
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [reportArea]);
+  }, [reportArea, townLocked, townFocused]);
 
   useEffect(() => {
     const q = reportName.trim();
-    if (q.length < 2) {
+    if (nameLocked || !nameFocused || q.length < 2) {
       setPlaceHits([]);
       return;
     }
@@ -526,7 +531,7 @@ export default function Home() {
         .catch(() => setPlaceHits(gold));
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [reportName, origin]);
+  }, [reportName, origin, nameLocked, nameFocused]);
 
   function matchingNeeds(placeNeeds: string[]) {
     return selectedNeeds.filter((need) => placeNeeds.includes(need));
@@ -677,6 +682,8 @@ export default function Home() {
       : `${hit.name}, ${hit.area}`;
     setReportArea(label);
     setTownHits([]);
+    setTownLocked(true);
+    setTownFocused(false);
   }
 
   async function pickPlaceHit(hit: {
@@ -689,8 +696,11 @@ export default function Home() {
   }) {
     setReportName(hit.name);
     setPlaceHits([]);
+    setNameLocked(true);
+    setNameFocused(false);
     if (hit.gold && hit.lat != null && hit.lng != null) {
       setReportArea(hit.area);
+      setTownLocked(true);
       setPinLat(hit.lat);
       setPinLng(hit.lng);
       setPinStatus("pinned");
@@ -699,6 +709,7 @@ export default function Home() {
     const gold = realStops.find((s) => s.id === hit.id || isSamePlace(s.name, hit.name));
     if (gold) {
       setReportArea(gold.area);
+      setTownLocked(true);
       setPinLat(gold.lat);
       setPinLng(gold.lng);
       setPinStatus("pinned");
@@ -709,6 +720,8 @@ export default function Home() {
     if (data.place) {
       setReportName(data.place.name || hit.name);
       setReportArea(data.place.area || hit.area);
+      setTownLocked(true);
+      setNameLocked(true);
       if (data.place.lat && data.place.lng) {
         setPinLat(data.place.lat);
         setPinLng(data.place.lng);
@@ -716,6 +729,7 @@ export default function Home() {
       }
     } else {
       setReportArea(hit.area);
+      setTownLocked(true);
     }
   }
 
@@ -777,7 +791,7 @@ export default function Home() {
     setBriefDraft("");
   }
 
-  function startPlaceReport(prefill?: { name?: string; area?: string }) {
+  function startPlaceReport(prefill?: { name?: string; area?: string; lat?: number; lng?: number }) {
     setReportName(prefill?.name || "");
     setReportArea(prefill?.area || origin?.label || "");
     setReportNeeds(selectedNeeds);
@@ -789,9 +803,21 @@ export default function Home() {
     setHoursSeen("");
     setJustSaved(null);
     setGoogleWrong(false);
-    setPinStatus("idle");
-    setPinLat(null);
-    setPinLng(null);
+    setPlaceHits([]);
+    setTownHits([]);
+    setNameFocused(false);
+    setTownFocused(false);
+    setNameLocked(!!prefill?.name);
+    setTownLocked(!!prefill?.area);
+    if (prefill?.lat != null && prefill?.lng != null) {
+      setPinLat(prefill.lat);
+      setPinLng(prefill.lng);
+      setPinStatus("pinned");
+    } else {
+      setPinLat(null);
+      setPinLng(null);
+      setPinStatus("idle");
+    }
     setScreen("report");
   }
 
@@ -1025,7 +1051,7 @@ export default function Home() {
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                startPlaceReport({ name: place.name, area: place.area });
+                startPlaceReport({ name: place.name, area: place.area, lat: place.lat, lng: place.lng });
               }}
               className="rounded-full bg-orange-600 px-4 py-3 text-sm font-bold text-white"
             >
@@ -1135,13 +1161,18 @@ export default function Home() {
               <input
                 required
                 value={reportName}
-                onChange={(e) => setReportName(e.target.value)}
+                onChange={(e) => {
+                  setNameLocked(false);
+                  setReportName(e.target.value);
+                }}
+                onFocus={() => setNameFocused(true)}
+                onBlur={() => window.setTimeout(() => setNameFocused(false), 220)}
                 placeholder="Three Rivers, Powerstop, Bread Works…"
                 autoComplete="off"
                 className="mt-1 w-full rounded-2xl border border-amber-200 px-4 py-3"
               />
-              {placeHits.length > 0 && (
-                <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+              {nameFocused && !nameLocked && placeHits.length > 0 && (
+                <div className="absolute z-[200] mt-1 max-h-72 w-full overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-amber-100">
                   {placeHits.map((hit) => (
                     <button
                       key={hit.id}
@@ -1165,13 +1196,18 @@ export default function Home() {
               <input
                 required
                 value={reportArea}
-                onChange={(e) => setReportArea(e.target.value)}
+                onChange={(e) => {
+                  setTownLocked(false);
+                  setReportArea(e.target.value);
+                }}
+                onFocus={() => setTownFocused(true)}
+                onBlur={() => window.setTimeout(() => setTownFocused(false), 220)}
                 placeholder="Almont, Gunnison, Paonia…"
                 autoComplete="off"
                 className="mt-1 w-full rounded-2xl border border-amber-200 px-4 py-3"
               />
-              {townHits.length > 0 && (
-                <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+              {townFocused && !townLocked && townHits.length > 0 && (
+                <div className="absolute z-[200] mt-1 max-h-72 w-full overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-amber-100">
                   {townHits.map((hit) => (
                     <button
                       key={hit.id}

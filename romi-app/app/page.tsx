@@ -315,6 +315,10 @@ export default function Home() {
   const [pinStatus, setPinStatus] = useState<"idle" | "pinning" | "pinned" | "denied">("idle");
   const [pinLat, setPinLat] = useState<number | null>(null);
   const [pinLng, setPinLng] = useState<number | null>(null);
+  const [townHits, setTownHits] = useState<Array<{ id: string; name: string; area: string }>>([]);
+  const [placeHits, setPlaceHits] = useState<
+    Array<{ id: string; name: string; area: string; gold?: boolean; lat?: number; lng?: number }>
+  >([]);
   const [radiusMiles, setRadiusMiles] = useState(15);
   const radiusMeters = Math.round(radiusMiles * 1609);
 
@@ -409,31 +413,44 @@ export default function Home() {
   }, [origin, selectedNeeds, refinements, radiusMiles]);
 
   useEffect(() => {
-    if (!origin || placeSearch.trim().length < 2) {
+    const q = placeSearch.trim();
+    if (q.length < 2) {
       setSuggestions([]);
       setSearchPlaces([]);
       return;
     }
-    const q = placeSearch.trim();
+    const gold = realStops
+      .filter((stop) => {
+        const hay = compactName(`${stop.name} ${stop.area}`);
+        return hay.includes(compactName(q)) || compactName(q).includes(compactName(stop.name));
+      })
+      .map((stop) => ({ id: stop.id, name: stop.name, area: stop.area }));
     const timer = window.setTimeout(() => {
-      fetch(
-        `/api/autocomplete?q=${encodeURIComponent(q)}&lat=${origin.lat}&lng=${origin.lng}&radius=${radiusMeters}`,
-      )
+      const params = new URLSearchParams({ q });
+      if (origin) {
+        params.set("lat", String(origin.lat));
+        params.set("lng", String(origin.lng));
+        params.set("radius", "80000");
+      }
+      fetch(`/api/autocomplete?${params.toString()}`)
         .then((r) => r.json())
         .then((data: { predictions?: Array<{ id: string; name: string; area: string }> }) => {
-          setSuggestions(data.predictions || []);
+          const google = data.predictions || [];
+          const merged = [
+            ...gold,
+            ...google.filter((g) => !gold.some((x) => isSamePlace(x.name, g.name))),
+          ];
+          setSuggestions(merged.slice(0, 8));
         })
-        .catch(() => setSuggestions([]));
+        .catch(() => setSuggestions(gold));
 
-      fetch(
-        `/api/search?q=${encodeURIComponent(q)}&lat=${origin.lat}&lng=${origin.lng}&radius=${radiusMeters}`,
-      )
+      fetch(`/api/search?${params.toString()}`)
         .then((r) => r.json())
         .then((data: { places?: NearbyPlace[] }) => {
           setSearchPlaces(data.places || []);
         })
         .catch(() => setSearchPlaces([]));
-    }, 220);
+    }, 200);
     return () => window.clearTimeout(timer);
   }, [placeSearch, origin]);
 
@@ -453,6 +470,63 @@ export default function Home() {
     }, 220);
     return () => window.clearTimeout(timer);
   }, [locationDraft, origin]);
+
+  useEffect(() => {
+    const q = reportArea.trim();
+    if (q.length < 2) {
+      setTownHits([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      fetch(
+        `/api/autocomplete?q=${encodeURIComponent(q)}&types=${encodeURIComponent("(cities)")}`,
+      )
+        .then((r) => r.json())
+        .then((data: { predictions?: Array<{ id: string; name: string; area: string }> }) => {
+          setTownHits(data.predictions || []);
+        })
+        .catch(() => setTownHits([]));
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [reportArea]);
+
+  useEffect(() => {
+    const q = reportName.trim();
+    if (q.length < 2) {
+      setPlaceHits([]);
+      return;
+    }
+    const gold = realStops
+      .filter((stop) => compactName(`${stop.name} ${stop.area}`).includes(compactName(q)))
+      .map((stop) => ({
+        id: stop.id,
+        name: stop.name,
+        area: stop.area,
+        gold: true as const,
+        lat: stop.lat,
+        lng: stop.lng,
+      }));
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ q, types: "establishment" });
+      if (origin) {
+        params.set("lat", String(origin.lat));
+        params.set("lng", String(origin.lng));
+        params.set("radius", "80000");
+      }
+      fetch(`/api/autocomplete?${params.toString()}`)
+        .then((r) => r.json())
+        .then((data: { predictions?: Array<{ id: string; name: string; area: string }> }) => {
+          const google = (data.predictions || []).map((g) => ({ ...g, gold: false as const }));
+          const merged = [
+            ...gold,
+            ...google.filter((g) => !gold.some((x) => isSamePlace(x.name, g.name))),
+          ];
+          setPlaceHits(merged.slice(0, 8));
+        })
+        .catch(() => setPlaceHits(gold));
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [reportName, origin]);
 
   function matchingNeeds(placeNeeds: string[]) {
     return selectedNeeds.filter((need) => placeNeeds.includes(need));
@@ -500,8 +574,17 @@ export default function Home() {
     if (viewingSavedDay?.placeIds.length) {
       return realStops.filter((s) => viewingSavedDay.placeIds.includes(s.id));
     }
+    const q = placeSearch.trim();
+    const namedGold =
+      q.length >= 2
+        ? realStops.filter((s) => compactName(`${s.name} ${s.area}`).includes(compactName(q)))
+        : [];
+    const verified = [
+      ...namedGold,
+      ...verifiedHere().filter((s) => !namedGold.some((g) => g.id === s.id)),
+    ];
     return [
-      ...verifiedHere().map((s) => ({ ...s, status: "verified" as const })),
+      ...verified.map((s) => ({ ...s, status: "verified" as const })),
       ...googleLeads().map((s) => ({ ...s, status: "google" as const })),
     ];
   }
@@ -569,6 +652,13 @@ export default function Home() {
   async function pickSuggestion(id: string, name: string) {
     setPlaceSearch(name);
     setSuggestions([]);
+    const gold = realStops.find((s) => s.id === id || isSamePlace(s.name, name));
+    if (gold) {
+      setHighlightedId(gold.id);
+      setExpandedId(gold.id);
+      if (!origin) await applyOrigin(gold.area, gold.lat, gold.lng);
+      return;
+    }
     const res = await fetch(`/api/place?id=${encodeURIComponent(id)}`);
     const data = await res.json();
     if (data.place) {
@@ -578,6 +668,54 @@ export default function Home() {
       });
       setHighlightedId(data.place.id);
       setExpandedId(data.place.id);
+    }
+  }
+
+  async function pickTownHit(hit: { id: string; name: string; area: string }) {
+    const label = hit.area.toLowerCase().includes(hit.name.toLowerCase())
+      ? hit.area
+      : `${hit.name}, ${hit.area}`;
+    setReportArea(label);
+    setTownHits([]);
+  }
+
+  async function pickPlaceHit(hit: {
+    id: string;
+    name: string;
+    area: string;
+    gold?: boolean;
+    lat?: number;
+    lng?: number;
+  }) {
+    setReportName(hit.name);
+    setPlaceHits([]);
+    if (hit.gold && hit.lat != null && hit.lng != null) {
+      setReportArea(hit.area);
+      setPinLat(hit.lat);
+      setPinLng(hit.lng);
+      setPinStatus("pinned");
+      return;
+    }
+    const gold = realStops.find((s) => s.id === hit.id || isSamePlace(s.name, hit.name));
+    if (gold) {
+      setReportArea(gold.area);
+      setPinLat(gold.lat);
+      setPinLng(gold.lng);
+      setPinStatus("pinned");
+      return;
+    }
+    const res = await fetch(`/api/place?id=${encodeURIComponent(hit.id)}`);
+    const data = await res.json();
+    if (data.place) {
+      setReportName(data.place.name || hit.name);
+      setReportArea(data.place.area || hit.area);
+      if (data.place.lat && data.place.lng) {
+        setPinLat(data.place.lat);
+        setPinLng(data.place.lng);
+        setPinStatus("pinned");
+      }
+    } else {
+      setReportArea(hit.area);
     }
   }
 
@@ -693,6 +831,8 @@ export default function Home() {
     setReportDogs("unsure");
     setBeenThere("yes");
     setGoogleWrong(false);
+    setTownHits([]);
+    setPlaceHits([]);
   }
 
   function pinHere() {
@@ -993,25 +1133,62 @@ export default function Home() {
               ) : null}
             </div>
 
-            <label className="block">
+            <label className="relative block">
               <span className="text-sm font-bold">Place name</span>
+              <p className="text-xs text-slate-500">Start typing. Tap the real name so nobody misspells it.</p>
               <input
                 required
                 value={reportName}
                 onChange={(e) => setReportName(e.target.value)}
-                placeholder="Powerstop, Bread Works…"
+                placeholder="Three Rivers, Powerstop, Bread Works…"
+                autoComplete="off"
                 className="mt-1 w-full rounded-2xl border border-amber-200 px-4 py-3"
               />
+              {placeHits.length > 0 && (
+                <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+                  {placeHits.map((hit) => (
+                    <button
+                      key={hit.id}
+                      type="button"
+                      onClick={() => void pickPlaceHit(hit)}
+                      className="block w-full border-b border-amber-50 px-4 py-3 text-left last:border-0"
+                    >
+                      <p className="font-bold text-slate-900">{hit.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {hit.gold ? "Scout verified · " : "Google · "}
+                        {hit.area}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </label>
-            <label className="block">
+            <label className="relative block">
               <span className="text-sm font-bold">Town / location</span>
+              <p className="text-xs text-slate-500">Type Al… then tap Almont, Colorado. Don’t guess the ZIP.</p>
               <input
                 required
                 value={reportArea}
                 onChange={(e) => setReportArea(e.target.value)}
-                placeholder="Gunnison, Paonia, Salida…"
+                placeholder="Almont, Gunnison, Paonia…"
+                autoComplete="off"
                 className="mt-1 w-full rounded-2xl border border-amber-200 px-4 py-3"
               />
+              {townHits.length > 0 && (
+                <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-2xl bg-white shadow-lg ring-1 ring-amber-100">
+                  {townHits.map((hit) => (
+                    <button
+                      key={hit.id}
+                      type="button"
+                      onClick={() => void pickTownHit(hit)}
+                      className="block w-full border-b border-amber-50 px-4 py-3 text-left last:border-0"
+                    >
+                      <p className="font-bold text-slate-900">{hit.name}</p>
+                      <p className="text-xs text-slate-500">{hit.area}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </label>
             <fieldset>
               <legend className="text-sm font-bold">What it actually helps with</legend>

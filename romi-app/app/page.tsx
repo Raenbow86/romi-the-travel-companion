@@ -255,6 +255,15 @@ type PlaceReview = {
   at: number;
 };
 
+type ReverifyAsk = {
+  id: string;
+  placeId: string;
+  placeName: string;
+  reason: string;
+  status: "for-angela" | "sent-to-scouts" | "keep";
+  at: number;
+};
+
 function compactName(value: string) {
   return value
     .toLowerCase()
@@ -327,6 +336,10 @@ export default function Home() {
   const [reviewStars, setReviewStars] = useState(0);
   const [reviewText, setReviewText] = useState("");
   const [reviewThanks, setReviewThanks] = useState("");
+  const [reviewSort, setReviewSort] = useState<"recent" | "oldest">("recent");
+  const [reverifyAsks, setReverifyAsks] = useState<ReverifyAsk[]>([]);
+  const [reverifyReason, setReverifyReason] = useState("");
+  const [reverifyOpen, setReverifyOpen] = useState(false);
   const [googleWrong, setGoogleWrong] = useState(false);
   const [pinStatus, setPinStatus] = useState<"idle" | "pinning" | "pinned" | "denied">("idle");
   const [pinLat, setPinLat] = useState<number | null>(null);
@@ -374,6 +387,11 @@ export default function Home() {
         const parsed = JSON.parse(reviewsRaw);
         if (Array.isArray(parsed)) setPlaceReviews(parsed);
       }
+      const reverifyRaw = window.localStorage.getItem("romi-reverify-asks");
+      if (reverifyRaw) {
+        const parsed = JSON.parse(reverifyRaw);
+        if (Array.isArray(parsed)) setReverifyAsks(parsed);
+      }
       const originRaw = window.localStorage.getItem("romi-origin");
       if (originRaw) {
         const parsed = JSON.parse(originRaw) as Origin;
@@ -397,11 +415,12 @@ export default function Home() {
       window.localStorage.setItem("romi-scout-points", String(scoutPoints));
       window.localStorage.setItem("romi-flagged-places", JSON.stringify(flaggedPlaces));
       window.localStorage.setItem("romi-place-reviews", JSON.stringify(placeReviews));
+      window.localStorage.setItem("romi-reverify-asks", JSON.stringify(reverifyAsks));
       if (origin) window.localStorage.setItem("romi-origin", JSON.stringify(origin));
     } catch {
       // ignore
     }
-  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, flaggedPlaces, placeReviews, hasLoadedReports]);
+  }, [travelerReports, savedPlaceIds, savedDays, scoutPoints, origin, flaggedPlaces, placeReviews, reverifyAsks, hasLoadedReports]);
 
   useEffect(() => {
     if (!origin) {
@@ -1016,9 +1035,18 @@ export default function Home() {
   }
 
   function reviewsFor(placeId: string, placeName: string) {
-    return placeReviews.filter(
+    const list = placeReviews.filter(
       (r) => r.placeId === placeId || isSamePlace(r.placeName, placeName),
     );
+    return [...list].sort((a, b) => (reviewSort === "recent" ? b.at - a.at : a.at - b.at));
+  }
+
+  function asksFor(placeId: string) {
+    return reverifyAsks.filter((a) => a.placeId === placeId);
+  }
+
+  function latestAsk(placeId: string) {
+    return asksFor(placeId)[0] || null;
   }
 
   function travelerScore(placeId: string, placeName: string) {
@@ -1043,6 +1071,24 @@ export default function Home() {
     setReviewText("");
     setReviewThanks("Thank you.");
     window.setTimeout(() => setReviewThanks(""), 4000);
+  }
+
+  function askReverify(placeId: string, placeName: string) {
+    const reason = reverifyReason.trim();
+    if (!reason) return;
+    setReverifyAsks((cur) => [
+      {
+        id: `${Date.now()}`,
+        placeId,
+        placeName,
+        reason,
+        status: "for-angela",
+        at: Date.now(),
+      },
+      ...cur,
+    ]);
+    setReverifyReason("");
+    setReverifyOpen(false);
   }
 
   function renderCard(place: {
@@ -1088,7 +1134,11 @@ export default function Home() {
           <span className="text-3xl">{place.icon}</span>
           <div className="min-w-0">
             <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
-              {status === "verified" ? "SCOUT VERIFIED" : "GOOGLE · NEEDS A SCOUT"}
+              {status === "verified"
+                ? latestAsk(place.id)?.status === "sent-to-scouts"
+                  ? "NEEDS A NEW SCOUT"
+                  : "SCOUT VERIFIED"
+                : "GOOGLE · NEEDS A SCOUT"}
             </p>
             <h4 className="mt-1 text-lg font-black leading-6 text-slate-900">{place.name}</h4>
             <p className="text-xs font-semibold text-slate-500">📍 {place.area}</p>
@@ -1158,16 +1208,38 @@ export default function Home() {
             <p className="text-sm font-black text-teal-900">Traveler reviews</p>
             <p className="mt-1 text-xs text-slate-500">Stars and a note. No points.</p>
             {reviewsFor(place.id, place.name).length === 0 ? (
-              <p className="mt-2 text-sm text-slate-600">None yet. Be the first.</p>
+              <p className="mt-2 text-sm text-slate-600">None yet.</p>
             ) : (
-              <ul className="mt-3 space-y-3">
-                {reviewsFor(place.id, place.name).map((rev) => (
-                  <li key={rev.id} className="text-sm text-slate-700">
-                    <p className="font-bold text-teal-800">{"★".repeat(rev.stars)}{"☆".repeat(5 - rev.stars)}</p>
-                    {rev.text ? <p className="mt-1 leading-5">{rev.text}</p> : null}
-                  </li>
-                ))}
-              </ul>
+              <>
+                <div className="mt-3 flex gap-2">
+                  {(["recent", "oldest"] as const).map((sort) => (
+                    <button
+                      key={sort}
+                      type="button"
+                      onClick={() => setReviewSort(sort)}
+                      className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${
+                        reviewSort === sort ? "bg-teal-700 text-white" : "bg-white text-slate-600 ring-1 ring-amber-100"
+                      }`}
+                    >
+                      {sort}
+                    </button>
+                  ))}
+                </div>
+                <ul className="mt-3 space-y-3">
+                  {reviewsFor(place.id, place.name).map((rev) => (
+                    <li key={rev.id} className="text-sm text-slate-700">
+                      <p className="font-bold text-teal-800">
+                        {"★".repeat(rev.stars)}
+                        {"☆".repeat(5 - rev.stars)}
+                        <span className="ml-2 text-xs font-semibold text-slate-500">
+                          {new Date(rev.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      </p>
+                      {rev.text ? <p className="mt-1 leading-5">{rev.text}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
             <p className="mt-4 text-sm font-bold">Your stars</p>
             <div className="mt-2 flex gap-1">
@@ -1185,7 +1257,6 @@ export default function Home() {
             <textarea
               value={reviewText}
               onChange={(e) => setReviewText(e.target.value)}
-              placeholder="Campsite 10 was quiet. Number 1 sat by the dumpsters…"
               className="mt-3 h-24 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm"
             />
             <button
@@ -1197,6 +1268,74 @@ export default function Home() {
               Add review
             </button>
             {reviewThanks ? <p className="mt-2 text-sm font-semibold text-teal-800">{reviewThanks}</p> : null}
+
+            <div className="mt-5 border-t border-teal-100 pt-4">
+              {latestAsk(place.id)?.status === "sent-to-scouts" ? (
+                <p className="text-sm font-bold text-orange-700">On the scout list. Waiting on a new look.</p>
+              ) : latestAsk(place.id)?.status === "for-angela" ? (
+                <div>
+                  <p className="text-sm font-bold text-teal-900">For Angela</p>
+                  <p className="mt-1 text-sm text-slate-700">{latestAsk(place.id)?.reason}</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReverifyAsks((cur) =>
+                          cur.map((a) =>
+                            a.placeId === place.id && a.status === "for-angela"
+                              ? { ...a, status: "sent-to-scouts" }
+                              : a,
+                          ),
+                        )
+                      }
+                      className="rounded-full bg-orange-600 px-4 py-2 text-sm font-bold text-white"
+                    >
+                      Send to scouts
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReverifyAsks((cur) =>
+                          cur.map((a) =>
+                            a.placeId === place.id && a.status === "for-angela"
+                              ? { ...a, status: "keep" }
+                              : a,
+                          ),
+                        )
+                      }
+                      className="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-600 ring-1 ring-amber-100"
+                    >
+                      Keep it
+                    </button>
+                  </div>
+                </div>
+              ) : reverifyOpen ? (
+                <div>
+                  <p className="text-sm font-bold">Needs a new scout</p>
+                  <textarea
+                    value={reverifyReason}
+                    onChange={(e) => setReverifyReason(e.target.value)}
+                    className="mt-2 h-24 w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => askReverify(place.id, place.name)}
+                    disabled={!reverifyReason.trim()}
+                    className="mt-2 w-full rounded-full bg-orange-600 py-3 text-sm font-bold text-white disabled:opacity-40"
+                  >
+                    Send to Angela
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setReverifyOpen(true)}
+                  className="text-sm font-bold text-orange-700"
+                >
+                  Needs a new scout
+                </button>
+              )}
+            </div>
           </div>
         ) : null}
         <p className="mt-3 text-sm font-bold text-orange-700">

@@ -147,3 +147,5 @@ Never commit API keys. Restrict the Google key in Cloud Console.
 4. **AI companion** only after the map answers the need honestly.
 
 If you are Kai, Angela, or a founding scout: the live app is the source of truth. This README is the written snapshot of that app as of September 9, 2026.
+
+Grok Bot: start at [GROK.md](./GROK.md). That file is your hello, your synopsis, and the rules.

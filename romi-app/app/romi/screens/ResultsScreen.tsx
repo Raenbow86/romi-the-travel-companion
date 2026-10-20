@@ -26,7 +26,7 @@ export function ResultsScreen() {
         <button
           type="button"
           onClick={() => r.setHomeView("find")}
-          className="absolute left-3 top-3 z-[400] max-w-[85%] truncate rounded-full bg-white px-4 py-3 text-[13px] font-bold text-slate-800 shadow-lg"
+          className="absolute left-14 top-3 z-[400] max-w-[75%] truncate rounded-full bg-white px-4 py-3 text-[13px] font-bold text-slate-800 shadow-lg"
         >
           {viewingSavedDay ? `🔖 ${viewingSavedDay.name}` : `${filterSummary} · ${radiusMiles} mi`} ✎
         </button>

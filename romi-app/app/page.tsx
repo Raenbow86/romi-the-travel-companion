@@ -1000,7 +1000,7 @@ export default function Home() {
                 setScreen(item.id);
               }}
               className={`rounded-2xl px-2 py-2 text-xs font-bold ${
-                screen === item.id ? "bg-teal-700 text-white" : "text-slate-500"
+                screen === item.id ? "bg-slate-800 text-white" : "text-slate-500"
               }`}
             >
               {item.label}
@@ -1105,14 +1105,20 @@ export default function Home() {
             setReviewThanks("");
           }
         }}
-        className={`cursor-pointer rounded-3xl bg-white p-4 shadow-sm ring-1 ${
-          highlightedId === place.id ? "ring-2 ring-orange-500" : "ring-amber-100"
+        className={`cursor-pointer rounded-3xl border-l-[5px] bg-white p-4 shadow-sm ring-1 ${
+          status === "verified" ? "border-l-teal-600" : "border-l-orange-600"
+        } ${
+          highlightedId === place.id ? "ring-2 ring-slate-800" : "ring-amber-100"
         }`}
       >
         <div className="flex gap-3">
           <span className="text-3xl">{place.icon}</span>
           <div className="min-w-0">
-            <p className="text-xs font-bold tracking-[0.14em] text-teal-700">
+            <p
+              className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-extrabold tracking-[0.08em] ${
+                status === "verified" ? "bg-teal-100 text-teal-800" : "bg-orange-100 text-orange-800"
+              }`}
+            >
               {status === "verified"
                 ? latestAsk(place.id)?.status === "sent-to-scouts"
                   ? "NEEDS A NEW SCOUT"
@@ -1127,7 +1133,7 @@ export default function Home() {
           const romi = travelerScore(place.id, place.name);
           if (!romi && !place.rating && !place.hours) return null;
           return (
-            <p className="mt-2 text-sm font-bold text-teal-800">
+            <p className="mt-2 text-sm font-bold text-slate-800">
               {romi ? `Travelers ★ ${romi.avg} (${romi.count})` : ""}
               {romi && (place.rating || place.hours) ? " · " : ""}
               {place.rating && !romi ? `Google ★ ${place.rating}${place.reviewCount ? ` (${place.reviewCount})` : ""}` : ""}
@@ -1137,7 +1143,7 @@ export default function Home() {
           );
         })()}
         {combo && (
-          <p className="mt-2 inline-block rounded-full bg-orange-100 px-3 py-1 text-xs font-black text-orange-800">
+          <p className="mt-2 inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-800">
             {combo}
           </p>
         )}
@@ -1147,7 +1153,7 @@ export default function Home() {
               <span
                 key={need}
                 className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                  matches.includes(need) ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-500"
+                  matches.includes(need) ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-500"
                 }`}
               >
                 {need}
@@ -1161,7 +1167,7 @@ export default function Home() {
           </p>
         ) : null}
         {status === "verified" && place.note ? (
-          <p className={`mt-2 text-sm font-semibold text-teal-800 ${open ? "" : "line-clamp-2"}`}>
+          <p className={`mt-2 text-sm font-semibold text-slate-800 ${open ? "" : "line-clamp-2"}`}>
             🧭 {place.note}
           </p>
         ) : null}
@@ -1179,17 +1185,17 @@ export default function Home() {
             target="_blank"
             rel="noreferrer"
             onClick={(event) => event.stopPropagation()}
-            className="mt-3 block text-sm font-bold text-teal-700"
+            className="mt-3 block text-sm font-bold text-slate-800"
           >
             Website →
           </a>
         ) : null}
         {open && status === "verified" ? (
           <div
-            className="mt-4 rounded-2xl bg-teal-50 p-4"
+            className="mt-4 rounded-2xl bg-slate-100 p-4"
             onClick={(event) => event.stopPropagation()}
           >
-            <p className="text-sm font-black text-teal-900">Traveler reviews</p>
+            <p className="text-sm font-black text-slate-800">Traveler reviews</p>
             <p className="mt-1 text-xs text-slate-500">Stars and a note. No points.</p>
             {reviewsFor(place.id, place.name).length === 0 ? (
               <p className="mt-2 text-sm text-slate-600">None yet.</p>
@@ -1202,7 +1208,7 @@ export default function Home() {
                       type="button"
                       onClick={() => setReviewSort(sort)}
                       className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${
-                        reviewSort === sort ? "bg-teal-700 text-white" : "bg-white text-slate-600 ring-1 ring-amber-100"
+                        reviewSort === sort ? "bg-slate-800 text-white" : "bg-white text-slate-600 ring-1 ring-amber-100"
                       }`}
                     >
                       {sort}
@@ -1212,7 +1218,7 @@ export default function Home() {
                 <ul className="mt-3 space-y-3">
                   {reviewsFor(place.id, place.name).map((rev) => (
                     <li key={rev.id} className="text-sm text-slate-700">
-                      <p className="font-bold text-teal-800">
+                      <p className="font-bold text-slate-800">
                         {"★".repeat(rev.stars)}
                         {"☆".repeat(5 - rev.stars)}
                         <span className="ml-2 text-xs font-semibold text-slate-500">
@@ -1232,7 +1238,7 @@ export default function Home() {
                   key={n}
                   type="button"
                   onClick={() => setReviewStars(n)}
-                  className={`text-2xl ${n <= reviewStars ? "text-orange-500" : "text-slate-300"}`}
+                  className={`text-2xl ${n <= reviewStars ? "text-slate-800" : "text-slate-300"}`}
                 >
                   ★
                 </button>
@@ -1247,18 +1253,18 @@ export default function Home() {
               type="button"
               onClick={() => addReview(place.id, place.name)}
               disabled={reviewStars < 1}
-              className="mt-3 w-full rounded-full bg-teal-700 py-3 text-sm font-bold text-white disabled:opacity-40"
+              className="mt-3 w-full rounded-full bg-slate-800 py-3 text-sm font-bold text-white disabled:opacity-40"
             >
               Add review
             </button>
-            {reviewThanks ? <p className="mt-2 text-sm font-semibold text-teal-800">{reviewThanks}</p> : null}
+            {reviewThanks ? <p className="mt-2 text-sm font-semibold text-slate-800">{reviewThanks}</p> : null}
 
-            <div className="mt-5 border-t border-teal-100 pt-4">
+            <div className="mt-5 border-t border-slate-300 pt-4">
               {latestAsk(place.id)?.status === "sent-to-scouts" ? (
-                <p className="text-sm font-bold text-orange-700">On the scout list. Waiting on a new look.</p>
+                <p className="text-sm font-bold text-slate-800">On the scout list. Waiting on a new look.</p>
               ) : latestAsk(place.id)?.status === "for-angela" ? (
                 <div>
-                  <p className="text-sm font-bold text-teal-900">For Angela</p>
+                  <p className="text-sm font-bold text-slate-800">For Angela</p>
                   <p className="mt-1 text-sm text-slate-700">{latestAsk(place.id)?.reason}</p>
                   <div className="mt-3 flex gap-2">
                     <button
@@ -1272,7 +1278,7 @@ export default function Home() {
                           ),
                         )
                       }
-                      className="rounded-full bg-orange-600 px-4 py-2 text-sm font-bold text-white"
+                      className="rounded-full bg-slate-800 px-4 py-2 text-sm font-bold text-white"
                     >
                       Send to scouts
                     </button>
@@ -1305,7 +1311,7 @@ export default function Home() {
                     type="button"
                     onClick={() => askReverify(place.id, place.name)}
                     disabled={!reverifyReason.trim()}
-                    className="mt-2 w-full rounded-full bg-orange-600 py-3 text-sm font-bold text-white disabled:opacity-40"
+                    className="mt-2 w-full rounded-full bg-slate-800 py-3 text-sm font-bold text-white disabled:opacity-40"
                   >
                     Send to Angela
                   </button>
@@ -1314,7 +1320,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setReverifyOpen(true)}
-                  className="text-sm font-bold text-orange-700"
+                  className="text-sm font-bold text-slate-800"
                 >
                   Needs a new scout
                 </button>
@@ -1322,7 +1328,7 @@ export default function Home() {
             </div>
           </div>
         ) : null}
-        <p className="mt-3 text-sm font-bold text-orange-700">
+        <p className="mt-3 text-sm font-bold text-slate-800">
           {open ? "Show less" : "Read more"}
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -1336,7 +1342,7 @@ export default function Home() {
                 );
               }}
               className={`rounded-full px-4 py-3 text-sm font-bold ${
-                saved ? "border border-teal-700 bg-white text-teal-700" : "bg-orange-600 text-white"
+                saved ? "border border-slate-800 bg-white text-slate-800" : "bg-slate-800 text-white"
               }`}
             >
               {saved ? "Saved" : "Save"}
@@ -1356,7 +1362,7 @@ export default function Home() {
                   hoursFull: place.hoursFull,
                 });
               }}
-              className="rounded-full bg-orange-600 px-4 py-3 text-sm font-bold text-white"
+              className="rounded-full bg-slate-800 px-4 py-3 text-sm font-bold text-white"
             >
               Scout it
             </button>
@@ -1366,7 +1372,7 @@ export default function Home() {
             target="_blank"
             rel="noreferrer"
             onClick={(event) => event.stopPropagation()}
-            className="rounded-full border border-teal-700 px-4 py-3 text-center text-sm font-bold text-teal-700"
+            className="rounded-full border border-slate-800 px-4 py-3 text-center text-sm font-bold text-slate-800"
           >
             Maps
           </a>
@@ -1403,13 +1409,13 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-amber-50 px-5 py-8 pb-28 text-slate-800">
         <section className="mx-auto max-w-md">
-          <button type="button" onClick={() => setScreen("home")} className="text-sm font-bold text-teal-700">
+          <button type="button" onClick={() => setScreen("home")} className="text-sm font-bold text-slate-800">
             ← Explore
           </button>
-          <p className="mt-6 text-xs font-bold tracking-[0.16em] text-teal-700">SCOUTS</p>
+          <p className="mt-6 text-xs font-bold tracking-[0.16em] text-slate-800">SCOUTS</p>
           <h1 className="mt-2 text-4xl font-black">Scout it.</h1>
           {justSaved ? (
-            <p className="mt-5 rounded-3xl bg-teal-50 p-4 text-sm font-semibold text-teal-900">
+            <p className="mt-5 rounded-3xl bg-slate-100 p-4 text-sm font-semibold text-slate-800">
               Sent {justSaved.name}. Pending Angela’s review — not teal yet.
             </p>
           ) : null}
@@ -1481,7 +1487,7 @@ export default function Home() {
             <div className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
               <p className="text-sm font-black">Pin</p>
               {pinLat != null && pinLng != null ? (
-                <p className="mt-1 text-sm text-teal-800">
+                <p className="mt-1 text-sm text-slate-800">
                   Pinned to this place · {pinLat.toFixed(5)}, {pinLng.toFixed(5)}
                 </p>
               ) : (
@@ -1510,7 +1516,7 @@ export default function Home() {
                         )
                       }
                       className={`rounded-full px-3 py-2 text-sm font-bold ${
-                        on ? "bg-orange-500 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                        on ? "bg-slate-800 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                       }`}
                     >
                       {need.icon} {need.label}
@@ -1528,7 +1534,7 @@ export default function Home() {
                     type="button"
                     onClick={() => setBeenThere(opt)}
                     className={`rounded-full px-3 py-2 text-sm font-bold ${
-                      beenThere === opt ? "bg-teal-700 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                      beenThere === opt ? "bg-slate-800 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                     }`}
                   >
                     {opt === "yes" ? "Yes — I went" : "No"}
@@ -1545,7 +1551,7 @@ export default function Home() {
                     type="button"
                     onClick={() => setPullThrough(opt)}
                     className={`rounded-full px-3 py-2 text-sm font-bold capitalize ${
-                      pullThrough === opt ? "bg-teal-700 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                      pullThrough === opt ? "bg-slate-800 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                     }`}
                   >
                     {opt}
@@ -1562,7 +1568,7 @@ export default function Home() {
                     type="button"
                     onClick={() => setReportDogs(opt)}
                     className={`rounded-full px-3 py-2 text-sm font-bold capitalize ${
-                      reportDogs === opt ? "bg-teal-700 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                      reportDogs === opt ? "bg-slate-800 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                     }`}
                   >
                     {opt}
@@ -1588,7 +1594,7 @@ export default function Home() {
                           setHoursSeen(googleHours);
                         }}
                         className={`rounded-full px-3 py-2 text-sm font-bold capitalize ${
-                          hoursOk === opt ? "bg-teal-700 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                          hoursOk === opt ? "bg-slate-800 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                         }`}
                       >
                         {opt}
@@ -1621,7 +1627,7 @@ export default function Home() {
                     type="button"
                     onClick={() => setReturnAgain(opt)}
                     className={`rounded-full px-3 py-2 text-sm font-bold capitalize ${
-                      returnAgain === opt ? "bg-orange-500 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                      returnAgain === opt ? "bg-slate-800 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                     }`}
                   >
                     {opt}
@@ -1644,16 +1650,16 @@ export default function Home() {
                 type="button"
                 onClick={() => setGoogleWrong((v) => !v)}
                 className={`mt-2 rounded-full px-3 py-2 text-sm font-bold ${
-                  googleWrong ? "bg-orange-500 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                  googleWrong ? "bg-slate-800 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                 }`}
               >
                 {googleWrong ? "Flagged — doesn’t belong" : "Flag it"}
               </button>
             </fieldset>
-            {formError ? <p className="text-sm font-semibold text-orange-700">{formError}</p> : null}
+            {formError ? <p className="text-sm font-semibold text-slate-800">{formError}</p> : null}
             <button
               type="submit"
-              className="w-full rounded-full bg-orange-600 py-4 font-bold text-white"
+              className="w-full rounded-full bg-slate-800 py-4 font-bold text-white"
             >
               Send scout report
             </button>
@@ -1667,7 +1673,7 @@ export default function Home() {
           ) : (
             travelerReports.map((report, i) => (
               <article key={report.id || `${report.name}-${i}`} className="mt-4 rounded-3xl bg-white p-4 shadow-sm">
-                <p className="text-xs font-bold text-teal-700">PENDING REVIEW</p>
+                <p className="text-xs font-bold text-slate-800">PENDING REVIEW</p>
                 <h3 className="font-black">{report.name}</h3>
                 <p className="text-sm text-slate-500">📍 {report.area}</p>
                 {report.helpsWith?.length ? (
@@ -1694,7 +1700,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setFlaggedPlaces((current) => current.filter((f) => f.id !== flag.id))}
-                    className="mt-2 text-sm font-bold text-teal-700"
+                    className="mt-2 text-sm font-bold text-slate-800"
                   >
                     Undo flag
                   </button>
@@ -1745,7 +1751,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-amber-50 px-5 py-8 pb-28 text-slate-800">
       <section className="mx-auto max-w-md">
-        <p className="text-sm font-bold tracking-[0.22em] text-teal-700">ROMI</p>
+        <p className="text-sm font-bold tracking-[0.22em] text-slate-800">ROMI</p>
         <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">
           {viewingSavedDay ? viewingSavedDay.name : "Find the next stop"}
         </h1>
@@ -1755,7 +1761,7 @@ export default function Home() {
 
         {!viewingSavedDay && (
           <form onSubmit={geocodeDraft} className="relative z-30 mt-6 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">WHERE</p>
+            <p className="text-xs font-bold tracking-[0.16em] text-slate-800">WHERE</p>
             <p className="mt-1 text-sm text-slate-600">
               Any town or ZIP. Same tools everywhere — not just our test towns.
             </p>
@@ -1764,9 +1770,9 @@ export default function Home() {
                 value={locationDraft}
                 onChange={(e) => setLocationDraft(e.target.value)}
                 placeholder="City or ZIP — Salida 81201, Moab, 81601…"
-                className="min-w-0 flex-1 rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+                className="min-w-0 flex-1 rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
               />
-              <button type="submit" className="rounded-2xl bg-teal-700 px-4 font-bold text-white">
+              <button type="submit" className="rounded-2xl bg-slate-800 px-4 font-bold text-white">
                 Go
               </button>
               {areaSuggestions.length > 0 && (
@@ -1789,7 +1795,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={useMyLocation}
-                className="rounded-full bg-orange-50 px-3 py-2 text-sm font-bold text-orange-700"
+                className="rounded-full bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800"
               >
                 Use my location
               </button>
@@ -1805,7 +1811,7 @@ export default function Home() {
                       if (data.lat) applyOrigin(data.label || area, data.lat, data.lng);
                     })();
                   }}
-                  className="rounded-full bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700"
+                  className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800"
                 >
                   {area.split(",")[0]}
                 </button>
@@ -1814,7 +1820,7 @@ export default function Home() {
             {geoStatus ? <p className="mt-2 text-sm text-slate-500">{geoStatus}</p> : null}
             {origin ? (
               <div className="mt-3">
-                <p className="text-sm font-semibold text-teal-800">
+                <p className="text-sm font-semibold text-slate-800">
                   Within {radiusMiles} miles of {origin.label.split(",")[0]}
                 </p>
                 <div className="mt-2 flex gap-2">
@@ -1824,7 +1830,7 @@ export default function Home() {
                       type="button"
                       onClick={() => setRadiusMiles(miles)}
                       className={`rounded-full px-3 py-1 text-sm font-bold ${
-                        radiusMiles === miles ? "bg-teal-700 text-white" : "bg-teal-50 text-teal-800"
+                        radiusMiles === miles ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-800"
                       }`}
                     >
                       {miles} mi
@@ -1838,7 +1844,7 @@ export default function Home() {
 
         {!viewingSavedDay && (
           <section className="relative z-30 mt-5 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-amber-100">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">FIND</p>
+            <p className="text-xs font-bold tracking-[0.16em] text-slate-800">FIND</p>
             <p className="mt-1 text-sm text-slate-600">
               Pick a need, then a specific. Vet means vets — not dog parks.
             </p>
@@ -1851,7 +1857,7 @@ export default function Home() {
                     type="button"
                     onClick={() => toggleNeed(need.label)}
                     className={`rounded-full px-3 py-2 text-sm font-bold ${
-                      on ? "bg-orange-500 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
+                      on ? "bg-slate-800 text-white" : "bg-slate-50 text-slate-700 ring-1 ring-amber-100"
                     }`}
                   >
                     {need.icon} {need.label}
@@ -1877,7 +1883,7 @@ export default function Home() {
                             : addRefinement(detail)
                         }
                         className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                          on ? "bg-teal-700 text-white" : "bg-teal-50 text-teal-800"
+                          on ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-800"
                         }`}
                       >
                         {detail}
@@ -1893,7 +1899,7 @@ export default function Home() {
                     key={`on-${need}`}
                     type="button"
                     onClick={() => toggleNeed(need)}
-                    className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-800"
+                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800"
                   >
                     {need} ×
                   </button>
@@ -1903,7 +1909,7 @@ export default function Home() {
                     key={`ref-${item}`}
                     type="button"
                     onClick={() => setRefinements((current) => current.filter((r) => r !== item))}
-                    className="rounded-full bg-teal-100 px-3 py-1 text-xs font-bold text-teal-900"
+                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800"
                   >
                     {item} ×
                   </button>
@@ -1933,7 +1939,7 @@ export default function Home() {
                   setBriefDraft(value);
                 }}
                 placeholder="Name a place, or say what you want…"
-                className="w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-orange-300"
+                className="w-full rounded-2xl border border-amber-200 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
               />
               {suggestions.length > 0 && (
                 <div className="absolute left-0 right-0 top-14 z-[200] max-h-72 overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-amber-100">
@@ -1952,7 +1958,7 @@ export default function Home() {
               )}
             </form>
             {romiReply ? (
-              <p className="mt-3 rounded-2xl bg-teal-50 p-3 text-sm font-semibold text-teal-900">{romiReply}</p>
+              <p className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-semibold text-slate-800">{romiReply}</p>
             ) : null}
           </section>
         )}
@@ -1974,7 +1980,7 @@ export default function Home() {
         {picked ? <div className="mt-4">{renderCard(picked)}</div> : null}
 
         <section className="mt-6 space-y-3">
-          <p className="text-xs font-bold tracking-[0.16em] text-orange-700">
+          <p className="text-xs font-bold tracking-[0.16em] text-slate-800">
             {nearbyStatus === "loading" ? "LOOKING AROUND…" : "IN THIS RADIUS"}
           </p>
           {allCards()
@@ -1988,8 +1994,8 @@ export default function Home() {
         </section>
 
         {origin && !viewingSavedDay && (
-          <section className="mt-8 rounded-3xl border border-orange-200 bg-orange-50 p-5">
-            <p className="text-xs font-bold tracking-[0.16em] text-orange-700">SAVE THIS DAY</p>
+          <section className="mt-8 rounded-3xl border border-slate-300 bg-slate-100 p-5">
+            <p className="text-xs font-bold tracking-[0.16em] text-slate-800">SAVE THIS DAY</p>
             <input
               value={dayName}
               onChange={(e) => setDayName(e.target.value)}
@@ -1999,7 +2005,7 @@ export default function Home() {
             <button
               type="button"
               onClick={saveThisDay}
-              className="mt-3 w-full rounded-full bg-orange-600 py-3 font-bold text-white"
+              className="mt-3 w-full rounded-full bg-slate-800 py-3 font-bold text-white"
             >
               Save this plan
             </button>

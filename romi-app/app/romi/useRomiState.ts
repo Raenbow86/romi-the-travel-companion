@@ -89,6 +89,7 @@ export function useRomiState() {
       const savedReports = window.localStorage.getItem("romi-traveler-reports");
       if (savedReports) {
         const parsed = JSON.parse(savedReports);
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing effect logic, kept as-is to avoid behavior change
         if (Array.isArray(parsed)) setTravelerReports(parsed);
       }
       const savedPlaces = window.localStorage.getItem("romi-saved-places");
@@ -153,6 +154,7 @@ export function useRomiState() {
 
   useEffect(() => {
     if (!origin) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing effect logic, kept as-is to avoid behavior change
       setNearbyPlaces([]);
       return;
     }
@@ -189,6 +191,7 @@ export function useRomiState() {
   useEffect(() => {
     const q = placeSearch.trim();
     if (q.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing effect logic, kept as-is to avoid behavior change
       setSuggestions([]);
       setSearchPlaces([]);
       return;
@@ -231,6 +234,7 @@ export function useRomiState() {
   useEffect(() => {
     const q = locationDraft.trim();
     if (q.length < 2 || (origin && q === origin.label)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing effect logic, kept as-is to avoid behavior change
       setAreaSuggestions([]);
       return;
     }
@@ -248,6 +252,7 @@ export function useRomiState() {
   useEffect(() => {
     const q = reportArea.trim();
     if (townLocked || !townFocused || q.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing effect logic, kept as-is to avoid behavior change
       if (townLocked || !townFocused) setTownHits([]);
       if (q.length < 2) setTownHits([]);
       return;
@@ -268,6 +273,7 @@ export function useRomiState() {
   useEffect(() => {
     const q = reportName.trim();
     if (nameLocked || !nameFocused || q.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing effect logic, kept as-is to avoid behavior change
       setPlaceHits([]);
       return;
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { coverage, needsFromText, pickedSubChips } from "@/lib/needs";
 import {
   Origin,
@@ -15,6 +15,7 @@ import {
   milesBetween,
   realStops,
 } from "./data";
+import { createLatestGuard, dropSubChipsOf, type SearchArea } from "./searchState";
 
 export type HomeView = "find" | "results";
 
@@ -36,6 +37,11 @@ export function useRomiState() {
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nearbyStatus, setNearbyStatus] = useState<"idle" | "loading" | "ready">("idle");
+  const [searchStatus, setSearchStatus] = useState<"idle" | "loading" | "ready">("idle");
+  // Origin + radius of the nearby search whose results are on screen (caption, radius filter and cards all use this).
+  const [resultsArea, setResultsArea] = useState<SearchArea | null>(null);
+  const nearbyGuard = useRef(createLatestGuard());
+  const searchGuard = useRef(createLatestGuard());
   const [geoStatus, setGeoStatus] = useState("");
 
   const [travelerReports, setTravelerReports] = useState<TravelerReport[]>([]);
@@ -158,7 +164,9 @@ export function useRomiState() {
       setNearbyPlaces([]);
       return;
     }
-    let cancelled = false;
+    const reqId = nearbyGuard.current.start();
+    const controller = new AbortController();
+    const area: SearchArea = { ...origin, radiusMiles };
     setNearbyStatus("loading");
     const params = new URLSearchParams({
       area: origin.label,
@@ -169,23 +177,17 @@ export function useRomiState() {
       exclude: realStops.map((s) => s.name).join("|"),
     });
     if (refinements.length) params.set("extra", refinements.join(","));
-    fetch(`/api/nearby?${params.toString()}`)
-      .then((r) => r.json())
-      .then((data: { places?: NearbyPlace[] }) => {
-        if (!cancelled) {
-          setNearbyPlaces(data.places || []);
-          setNearbyStatus("ready");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setNearbyPlaces([]);
-          setNearbyStatus("ready");
-        }
-      });
-    return () => {
-      cancelled = true;
+    const apply = (places: NearbyPlace[]) => {
+      if (controller.signal.aborted || !nearbyGuard.current.isLatest(reqId)) return; // stale response
+      setNearbyPlaces(places);
+      setResultsArea(area);
+      setNearbyStatus("ready");
     };
+    fetch(`/api/nearby?${params.toString()}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((data: { places?: NearbyPlace[] }) => apply(data.places || []))
+      .catch(() => apply([]));
+    return () => controller.abort();
   }, [origin, selectedNeeds, refinements, radiusMiles, radiusMeters]);
 
   useEffect(() => {
@@ -194,6 +196,7 @@ export function useRomiState() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- pre-existing effect logic, kept as-is to avoid behavior change
       setSuggestions([]);
       setSearchPlaces([]);
+      setSearchStatus("idle");
       return;
     }
     const gold = realStops
@@ -202,6 +205,9 @@ export function useRomiState() {
         return hay.includes(compactName(q)) || compactName(q).includes(compactName(stop.name));
       })
       .map((stop) => ({ id: stop.id, name: stop.name, area: stop.area }));
+    const reqId = searchGuard.current.start();
+    const controller = new AbortController();
+    setSearchStatus("loading");
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams({ q });
       if (origin) {
@@ -221,14 +227,20 @@ export function useRomiState() {
         })
         .catch(() => setSuggestions(gold));
 
-      fetch(`/api/search?${params.toString()}`)
+      const apply = (places: NearbyPlace[]) => {
+        if (controller.signal.aborted || !searchGuard.current.isLatest(reqId)) return; // stale response
+        setSearchPlaces(places);
+        setSearchStatus("ready");
+      };
+      fetch(`/api/search?${params.toString()}`, { signal: controller.signal })
         .then((r) => r.json())
-        .then((data: { places?: NearbyPlace[] }) => {
-          setSearchPlaces(data.places || []);
-        })
-        .catch(() => setSearchPlaces([]));
+        .then((data: { places?: NearbyPlace[] }) => apply(data.places || []))
+        .catch(() => apply([]));
     }, 200);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [placeSearch, origin]);
 
   useEffect(() => {
@@ -316,9 +328,13 @@ export function useRomiState() {
     return coverage({ helpsWith: placeNeeds, subChips: placeSubs }, selectedNeeds, pickedSubs);
   }
 
+  // Until the first nearby search lands, fall back to the live origin/radius.
+  const appliedArea: SearchArea | null = resultsArea ?? (origin ? { ...origin, radiusMiles } : null);
+  const isSearching = !!origin && (nearbyStatus !== "ready" || searchStatus === "loading");
+
   function inRadius(stop: { lat: number; lng: number }) {
-    if (!origin) return false;
-    return milesBetween(origin, stop) <= radiusMiles;
+    if (!origin || !appliedArea) return false;
+    return milesBetween(appliedArea, stop) <= appliedArea.radiusMiles;
   }
 
   // Display only: distance shown on cards.
@@ -532,6 +548,10 @@ export function useRomiState() {
 
   function toggleNeed(label: string) {
     setPlaceSearch("");
+    if (selectedNeeds.includes(label)) {
+      // Turning a need off also clears its sub-chips so they can't silently filter later searches.
+      setRefinements((current) => dropSubChipsOf(label, current));
+    }
     setSelectedNeeds((current) =>
       current.includes(label) ? current.filter((n) => n !== label) : [...current, label],
     );
@@ -830,6 +850,10 @@ export function useRomiState() {
     expandedId,
     setExpandedId,
     nearbyStatus,
+    searchStatus,
+    resultsArea,
+    appliedArea,
+    isSearching,
     setNearbyStatus,
     geoStatus,
     setGeoStatus,

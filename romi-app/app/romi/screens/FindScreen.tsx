@@ -26,7 +26,7 @@ export function FindScreen() {
     setBriefDraft,
     suggestions,
     romiReply,
-    nearbyStatus,
+    isSearching,
   } = r;
   const count = r.allCards().length;
 
@@ -224,7 +224,7 @@ export function FindScreen() {
       <button type="button" disabled={!origin} onClick={() => r.setHomeView("results")} className={`${primaryBtn} mt-6`}>
         {!origin
           ? "Set a location first"
-          : nearbyStatus === "loading"
+          : isSearching
             ? "Looking around…"
             : `Show ${count} place${count === 1 ? "" : "s"}`}
       </button>

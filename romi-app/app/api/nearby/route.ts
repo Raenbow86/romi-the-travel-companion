@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { NEEDS, NEED_BY_LABEL, classify, iconForNeed, passesNeedFilter, pickedSubChips, type NeedLabel } from "@/lib/needs";
 
 type Center = { lat: number; lng: number; radius: number };
 
@@ -9,7 +10,8 @@ type NearbyPlace = {
   lat: number;
   lng: number;
   icon: string;
-  helpsWith: string[];
+  helpsWith: NeedLabel[];
+  subChips: string[];
   description: string;
   note: string;
   website?: string;
@@ -21,55 +23,6 @@ type NearbyPlace = {
   source: "google" | "openstreetmap";
 };
 
-const NEED_TAGS: Record<string, string[]> = {
-  Sleep: ['["tourism"="camp_site"]', '["tourism"="hotel"]'],
-  Food: [
-    '["amenity"="restaurant"]',
-    '["amenity"="cafe"]',
-    '["shop"="bakery"]',
-    '["shop"="supermarket"]',
-  ],
-  Fuel: ['["amenity"="fuel"]'],
-  Water: ['["amenity"="drinking_water"]'],
-  Shower: ['["amenity"="shower"]'],
-  Laundry: ['["amenity"="laundry"]'],
-  Adventure: ['["tourism"="viewpoint"]', '["leisure"="park"]'],
-  "Adult-friendly": [
-    '["craft"="winery"]',
-    '["shop"="wine"]',
-    '["shop"="alcohol"]',
-    '["amenity"="bar"]',
-    '["amenity"="pub"]',
-    '["craft"="brewery"]',
-  ],
-  "Wi‑Fi & Cell": ['["internet_access"="wlan"]'],
-  "Dog Needs": ['["dog"="yes"]'],
-  Power: ['["amenity"="charging_station"]'],
-};
-
-const GOOGLE_TYPES: Record<string, string> = {
-  Sleep: "campground",
-  Food: "restaurant",
-  Fuel: "gas_station",
-  Laundry: "laundry",
-  Adventure: "park",
-  "Adult-friendly": "bar",
-  Power: "electric_vehicle_charging_station",
-};
-
-const ICONS: Record<string, string> = {
-  Sleep: "🏕️",
-  Food: "🍔",
-  Fuel: "⛽",
-  Water: "💧",
-  Shower: "🚿",
-  Laundry: "🧺",
-  Adventure: "🏞️",
-  "Adult-friendly": "🍷",
-  "Wi‑Fi & Cell": "📶",
-  "Dog Needs": "🐾",
-  Power: "⚡",
-};
 
 function centerFor(area: string, lat?: number, lng?: number, radius?: number): Center {
   if (typeof lat === "number" && !Number.isNaN(lat) && typeof lng === "number" && !Number.isNaN(lng)) {
@@ -100,33 +53,18 @@ function centerFor(area: string, lat?: number, lng?: number, radius?: number): C
   return { lat: 38.545, lng: -106.925, radius: 18000 };
 }
 
-function tagsFor(needs: string[]): string[] {
+/** OSM tag filters for the picked needs. If a need has sub-chips picked, only those sub-chips' tags. */
+function tagsFor(needs: string[], subs: Record<string, string[]>): string[] {
   const tags = new Set<string>();
   const list = needs.length > 0 ? needs : ["Sleep", "Food", "Fuel"];
   for (const need of list) {
-    for (const tag of NEED_TAGS[need] || []) tags.add(tag);
+    const def = NEED_BY_LABEL[need];
+    if (!def) continue;
+    const picked = def.subChips.filter((s) => subs[need]?.includes(s.label));
+    const source = picked.length ? picked.flatMap((s) => s.osm) : def.osm;
+    for (const tag of source) tags.add(tag);
   }
   return [...tags];
-}
-
-function helpsFromGoogleTypes(types: string[] = []): string[] {
-  const found = new Set<string>();
-  for (const t of types) {
-    if (["campground", "rv_park", "lodging"].includes(t)) found.add("Sleep");
-    if (["restaurant", "cafe", "bakery", "meal_takeaway", "supermarket"].includes(t)) {
-      found.add("Food");
-    }
-    if (t === "gas_station") found.add("Fuel");
-    if (t === "laundry") found.add("Laundry");
-    if (["park", "campground", "natural_feature"].includes(t)) found.add("Adventure");
-    if (["liquor_store", "bar", "winery", "night_club"].includes(t) || t.includes("brew")) {
-      found.add("Adult-friendly");
-    }
-    if (t === "cafe") found.add("Wi‑Fi & Cell");
-    if (t === "electric_vehicle_charging_station") found.add("Power");
-    if (t === "pet_store" || t === "veterinary_care" || t === "dog_park") found.add("Dog Needs");
-  }
-  return [...found];
 }
 
 function compactName(value: string) {
@@ -145,82 +83,6 @@ function excludeMatch(name: string, exclude: string[]) {
     if (!n || !e) return false;
     return n === e || n.includes(e) || e.includes(n);
   });
-}
-
-const NEED_QUERIES: Record<string, Array<{ type: string; keyword: string }>> = {
-  Sleep: [
-    { type: "campground", keyword: "campground" },
-    { type: "rv_park", keyword: "rv park" },
-    { type: "lodging", keyword: "cabin motel" },
-  ],
-  Fuel: [{ type: "gas_station", keyword: "gas station diesel" }],
-  Food: [
-    { type: "restaurant", keyword: "restaurant" },
-    { type: "cafe", keyword: "cafe bakery" },
-    { type: "supermarket", keyword: "grocery" },
-  ],
-  Laundry: [{ type: "laundry", keyword: "laundromat" }],
-  Adventure: [
-    { type: "park", keyword: "trail park" },
-    { type: "tourist_attraction", keyword: "hike fishing viewpoint" },
-  ],
-  "Adult-friendly": [
-    { type: "bar", keyword: "bar brewery" },
-    { type: "liquor_store", keyword: "liquor wine" },
-  ],
-  Power: [{ type: "electric_vehicle_charging_station", keyword: "charging" }],
-  Shower: [
-    { type: "campground", keyword: "campground" },
-    { type: "rv_park", keyword: "rv park" },
-    { type: "spa", keyword: "hot springs soak" },
-  ],
-  Water: [
-    { type: "campground", keyword: "potable water fill" },
-    { type: "rv_park", keyword: "water fill" },
-  ],
-  "Dog Needs": [
-    { type: "park", keyword: "dog park" },
-    { type: "pet_store", keyword: "pet store dog" },
-    { type: "veterinary_care", keyword: "veterinarian" },
-    { type: "restaurant", keyword: "dog friendly patio" },
-  ],
-  "Wi‑Fi & Cell": [{ type: "cafe", keyword: "wifi" }],
-};
-
-const REFINE_QUERIES: Record<string, { need: string; queries: Array<{ type: string; keyword: string }> }> = {
-  vet: { need: "Dog Needs", queries: [{ type: "veterinary_care", keyword: "veterinarian animal hospital" }] },
-  "dog park": { need: "Dog Needs", queries: [{ type: "park", keyword: "dog park" }] },
-  supplies: { need: "Dog Needs", queries: [{ type: "pet_store", keyword: "pet supplies" }] },
-  "pet-friendly patio": {
-    need: "Dog Needs",
-    queries: [{ type: "restaurant", keyword: "dog friendly patio" }],
-  },
-  "off-leash": { need: "Dog Needs", queries: [{ type: "park", keyword: "off leash dog park" }] },
-  "golf carts": {
-    need: "Adult-friendly",
-    queries: [
-      { type: "bar", keyword: "golf cart" },
-      { type: "tourist_attraction", keyword: "golf cart" },
-    ],
-  },
-  brewery: { need: "Adult-friendly", queries: [{ type: "bar", keyword: "brewery" }] },
-  winery: { need: "Adult-friendly", queries: [{ type: "liquor_store", keyword: "winery tasting" }] },
-  cocktails: { need: "Adult-friendly", queries: [{ type: "bar", keyword: "cocktail bar" }] },
-  patio: { need: "Adult-friendly", queries: [{ type: "bar", keyword: "patio" }] },
-  hike: { need: "Adventure", queries: [{ type: "park", keyword: "hiking trail" }] },
-  fish: { need: "Adventure", queries: [{ type: "park", keyword: "fishing" }] },
-  view: { need: "Adventure", queries: [{ type: "tourist_attraction", keyword: "viewpoint overlook" }] },
-  "hot springs": { need: "Adventure", queries: [{ type: "spa", keyword: "hot springs" }] },
-  atv: { need: "Adventure", queries: [{ type: "tourist_attraction", keyword: "atv" }] },
-  groceries: { need: "Food", queries: [{ type: "supermarket", keyword: "grocery" }] },
-  "sit-down": { need: "Food", queries: [{ type: "restaurant", keyword: "restaurant" }] },
-  coffee: { need: "Food", queries: [{ type: "cafe", keyword: "coffee" }] },
-};
-
-function phraseHas(hay: string, needle: string) {
-  return new RegExp(`(^|[^a-z0-9])${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`, "i").test(
-    hay,
-  );
 }
 
 function todayHours(weekdayText?: string[], openNow?: boolean) {
@@ -245,47 +107,6 @@ function compileBlurb(place: GoogleDetails) {
       (place.user_ratings_total ? ` from ${place.user_ratings_total} reviews.` : ".");
   }
   return "Google listing nearby. Open the card for hours and visitor notes.";
-}
-
-function looksWrongForNeeds(types: string[] = [], needs: string[]) {
-  const reject = [
-    "general_contractor",
-    "roofing_contractor",
-    "electrician",
-    "plumber",
-    "car_repair",
-    "car_dealer",
-    "real_estate_agency",
-    "insurance_agency",
-    "lawyer",
-    "storage",
-    "moving_company",
-    "hardware_store",
-    "home_goods_store",
-  ];
-  const amenity = [
-    "campground",
-    "rv_park",
-    "lodging",
-    "gas_station",
-    "restaurant",
-    "cafe",
-    "park",
-    "spa",
-    "gym",
-    "bar",
-    "supermarket",
-    "laundry",
-  ];
-  if (types.some((t) => reject.includes(t)) && !types.some((t) => amenity.includes(t))) {
-    return true;
-  }
-  if (needs.includes("Shower")) {
-    return !types.some((t) =>
-      ["campground", "rv_park", "lodging", "spa", "gym", "gas_station"].includes(t),
-    );
-  }
-  return false;
 }
 
 async function nearbyIdsFor(
@@ -325,30 +146,30 @@ async function fromGoogle(
   const center = centerFor(area, origin?.lat, origin?.lng, origin?.radius);
   const selected = needs.length > 0 ? needs : extra ? [] : ["Food", "Fuel", "Sleep"];
   const phrase = (extra || "").trim();
-  const refineKeys = Object.keys(REFINE_QUERIES).filter((key) => phraseHas(phrase, key));
-  const covered = new Set(refineKeys.map((key) => REFINE_QUERIES[key].need));
+  const subs = pickedSubChips(selected, phrase.split(","));
   const queries: Array<{ type: string; keyword: string; need?: string }> = [];
 
-  for (const key of refineKeys) {
-    const refine = REFINE_QUERIES[key];
-    for (const query of refine.queries) {
-      queries.push({ ...query, need: refine.need });
-    }
-  }
-
   for (const need of selected) {
-    if (covered.has(need)) continue;
-    for (const query of NEED_QUERIES[need] || [{ type: "point_of_interest", keyword: need }]) {
+    const def = NEED_BY_LABEL[need];
+    if (!def) continue;
+    const picked = def.subChips.filter((sub) => subs[need]?.includes(sub.label));
+    for (const query of picked.length ? picked.flatMap((sub) => sub.google) : def.google) {
       queries.push({ ...query, need });
     }
   }
 
-  if (phrase && refineKeys.length === 0) {
-    queries.unshift({ type: "point_of_interest", keyword: phrase.slice(0, 80), need: selected[0] });
+  // Free-form words that are not sub-chips become one extra keyword search.
+  const freeWords = phrase
+    .split(",")
+    .map((w) => w.trim())
+    .filter((w) => w && !NEEDS.some((d) => d.subChips.some((sub) => sub.label.toLowerCase() === w.toLowerCase())))
+    .join(" ");
+  if (freeWords) {
+    queries.unshift({ type: "point_of_interest", keyword: freeWords.slice(0, 80), need: selected[0] });
   }
 
   if (queries.length === 0) {
-    queries.push({ type: "point_of_interest", keyword: phrase.slice(0, 80) || "food", need: "Food" });
+    queries.push({ type: "point_of_interest", keyword: "food", need: "Food" });
   }
 
   const idToNeeds = new Map<string, Set<string>>();
@@ -393,21 +214,20 @@ async function fromGoogle(
 
   return detailed
     .filter((place): place is GoogleDetails & { placeId: string } =>
-      Boolean(
-        place?.name &&
-          place.geometry?.location &&
-          !excludeMatch(place.name || "", exclude) &&
-          !looksWrongForNeeds(place.types, selected),
-      ),
+      Boolean(place?.name && place.geometry?.location && !excludeMatch(place.name || "", exclude)),
     )
     .map((place) => {
-      const helpsWith = [
-        ...new Set([
-          ...helpsFromGoogleTypes(place.types),
-          ...(idToNeeds.get(place.placeId) || []),
-        ]),
-      ];
-      const primaryNeed = selected.find((need) => helpsWith.includes(need)) || helpsWith[0] || selected[0];
+      // The query that found it is NOT evidence. Only the place's own types/text count.
+      const { helpsWith, subChips } = classify({
+        name: place.name,
+        types: place.types,
+        text: place.editorial_summary?.overview,
+      });
+      return { place, helpsWith, subChips };
+    })
+    .filter(({ helpsWith, subChips }) => passesNeedFilter({ helpsWith, subChips }, selected, subs))
+    .map(({ place, helpsWith, subChips }) => {
+      const primaryNeed = selected.find((need) => helpsWith.includes(need as NeedLabel)) || helpsWith[0];
       const hoursToday = todayHours(place.opening_hours?.weekday_text, place.opening_hours?.open_now);
       const hoursFull = (place.opening_hours?.weekday_text || []).join("\n");
       const review = place.reviews?.[0]?.text?.replace(/\s+/g, " ").slice(0, 280);
@@ -418,8 +238,9 @@ async function fromGoogle(
         area: place.formatted_address || area,
         lat: place.geometry!.location.lat,
         lng: place.geometry!.location.lng,
-        icon: ICONS[primaryNeed] || "📍",
+        icon: iconForNeed(primaryNeed),
         helpsWith,
+        subChips,
         description: compileBlurb(place),
         note: hoursToday || "Hours not listed — confirm before you go.",
         website: place.website || place.url,
@@ -453,9 +274,12 @@ async function fromOsm(
   needs: string[],
   exclude: string[],
   origin?: { lat: number; lng: number; radius?: number },
+  extra?: string,
 ): Promise<NearbyPlace[]> {
+  const subs = pickedSubChips(needs, (extra || "").split(","));
+  const selected = needs.length > 0 ? needs : ["Sleep", "Food", "Fuel"];
   const center = centerFor(area, origin?.lat, origin?.lng, origin?.radius);
-  const filters = tagsFor(needs)
+  const filters = tagsFor(needs, subs)
     .map((tag) => `nwr${tag}(around:${center.radius},${center.lat},${center.lng});`)
     .join("\n");
   const query = `[out:json][timeout:18];\n(\n${filters}\n);\nout center;`;
@@ -486,15 +310,8 @@ async function fromOsm(
       const name = tags.name;
       if (!lat || !lng || !name || excludeMatch(name, exclude)) continue;
 
-      const helpsWith = Object.entries(NEED_TAGS)
-        .filter(([, osmTags]) =>
-          osmTags.some((tag) => {
-            const key = tag.match(/\["([^"]+)"/)?.[1];
-            const val = tag.match(/"([^"]+)"\]/)?.[1];
-            return key && val && tags[key] === val;
-          }),
-        )
-        .map(([need]) => need);
+      const { helpsWith, subChips } = classify({ name, osmTags: tags, text: tags.description });
+      if (!passesNeedFilter({ helpsWith, subChips }, selected, subs)) continue;
 
       const bits = [
         tags.cuisine?.replace(/;/g, ", "),
@@ -508,7 +325,7 @@ async function fromOsm(
       const website = tags.website || tags["contact:website"];
       const hours = tags.opening_hours;
       const phone = tags.phone || tags["contact:phone"];
-      const primary = helpsWith[0] || "Adventure";
+      const primary = selected.find((need) => helpsWith.includes(need as NeedLabel)) || helpsWith[0];
 
       mapped.push({
         id: `osm-${el.id}`,
@@ -516,8 +333,9 @@ async function fromOsm(
         area: area || "Nearby",
         lat,
         lng,
-        icon: ICONS[primary] || "📍",
+        icon: iconForNeed(primary),
         helpsWith,
+        subChips,
         description: bits.length
           ? `Map listing: ${bits.join(" · ")}. Not scout-verified yet.`
           : "Nearby map listing. A Romi scout has not confirmed this stop yet.",
@@ -534,87 +352,6 @@ async function fromOsm(
       });
   }
   return mapped.slice(0, 12);
-}
-
-function fallbackPlaces(area: string, exclude: string[]): NearbyPlace[] {
-  const q = area.toLowerCase();
-  const paonia = q.includes("paonia") || q.includes("hotchkiss") || q.includes("wine");
-  const gunnison = q.includes("gunnison") || q.includes("almont") || q.includes("lodgepole");
-  const list: NearbyPlace[] = paonia
-    ? [
-        {
-          id: "lead-stone-cottage",
-          name: "Stone Cottage Cellars",
-          area: "Paonia, Colorado",
-          lat: 38.8706,
-          lng: -107.612,
-          icon: "🍷",
-          helpsWith: ["Adult-friendly", "Adventure"],
-          description:
-            "High-mesa tasting room above Paonia. Listed as a wine stop — not scout-verified in ROMI yet.",
-          note: "Confirm hours and the drive up. A scout has not filed a ROMI report.",
-          website: "https://www.stonecottagecellars.com/",
-          source: "openstreetmap",
-        },
-        {
-          id: "lead-azura",
-          name: "Azura Cellars",
-          area: "Paonia, Colorado",
-          lat: 38.873,
-          lng: -107.62,
-          icon: "🍷",
-          helpsWith: ["Adult-friendly", "Food", "Adventure"],
-          description:
-            "Winery and views west of town. Map/Google listing only until a scout goes.",
-          note: "Seasonal tasting hours. Not scout-verified.",
-          website: "https://www.azuracellars.com/",
-          source: "openstreetmap",
-        },
-        {
-          id: "lead-living-farm",
-          name: "The Living Farm Cafe",
-          area: "Paonia, Colorado",
-          lat: 38.8689,
-          lng: -107.5928,
-          icon: "🥬",
-          helpsWith: ["Food"],
-          description:
-            "Farm cafe in Paonia. Useful food lead — needs a real ROMI scout report.",
-          note: "Confirm open days. Not scout-verified.",
-          source: "openstreetmap",
-        },
-      ]
-    : gunnison
-      ? [
-          {
-            id: "lead-city-market",
-            name: "City Market",
-            area: "Gunnison, Colorado",
-            lat: 38.5519,
-            lng: -106.9272,
-            icon: "🛒",
-            helpsWith: ["Food"],
-            description:
-              "Main grocery on N Main. Resupply lead — not a scout-verified ROMI card yet.",
-            note: "880 N Main St. Confirm hours. Not scout-verified.",
-            source: "openstreetmap",
-          },
-          {
-            id: "lead-high-alpine",
-            name: "High Alpine Brewing",
-            area: "Gunnison, Colorado",
-            lat: 38.5447,
-            lng: -106.9275,
-            icon: "🍔",
-            helpsWith: ["Food"],
-            description:
-              "Downtown brewery and food. Google/map lead until a scout reports.",
-            note: "Not scout-verified.",
-            source: "openstreetmap",
-          },
-        ]
-      : [];
-  return list.filter((place) => !excludeMatch(place.name, exclude));
 }
 
 export async function GET(request: NextRequest) {
@@ -647,7 +384,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const osm = await fromOsm(area, needs, exclude, origin);
+    const osm = await fromOsm(area, needs, exclude, origin, extra);
     if (osm.length > 0) {
       return NextResponse.json({
         places: osm,
@@ -656,12 +393,12 @@ export async function GET(request: NextRequest) {
       });
     }
   } catch {
-    // fall through to local leads
+    // nothing found — we never invent places
   }
 
   return NextResponse.json({
-    places: fallbackPlaces(area, exclude),
-    source: "fallback",
+    places: [] as NearbyPlace[],
+    source: "none",
     googleError: googleError || undefined,
   });
 }

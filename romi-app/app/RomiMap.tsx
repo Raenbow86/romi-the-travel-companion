@@ -47,7 +47,9 @@ export function RomiMap({
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ remove: () => void } | null>(null);
   const selectRef = useRef(onSelect);
-  selectRef.current = onSelect;
+  useEffect(() => {
+    selectRef.current = onSelect;
+  }, [onSelect]);
 
   const key = stops.map((s) => `${s.id}:${s.kind || ""}:${s.lat}:${s.lng}`).join("|");
 

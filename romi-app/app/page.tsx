@@ -2,28 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { RomiMap } from "./RomiMap";
+import { NEEDS, NEED_BY_LABEL, comboBadge, coverage, needsFromText, pickedSubChips } from "@/lib/needs";
 
-const needs = [
-  { icon: "🛏️", label: "Sleep", detail: "Campgrounds, cabins, and overnight options" },
-  { icon: "💧", label: "Water", detail: "Potable-water refills and water stations" },
-  { icon: "🚿", label: "Shower", detail: "Showers and clean-up stops" },
-  { icon: "🍎", label: "Food", detail: "Groceries, meals, and road snacks" },
-  { icon: "⛽", label: "Fuel", detail: "Gas, diesel, propane, and charging later" },
-  { icon: "⚡", label: "Power", detail: "Hookups, outlets, and places to recharge" },
-  { icon: "📶", label: "Wi‑Fi & Cell", detail: "Simple availability and useful signal info" },
-  { icon: "🧺", label: "Laundry", detail: "Laundromats and campground laundry" },
-  { icon: "🐾", label: "Dog Needs", detail: "Pet-friendly stops, supplies, and walks" },
-  { icon: "🏔️", label: "Adventure", detail: "Trails, fishing, views, and local fun" },
-  { icon: "🍷", label: "Adult-friendly", detail: "Wine, beer, liquor, bars, and wineries" },
-];
-
-const suggestedAreas = [
-  "Lodgepole Campground, Colorado",
-  "Gunnison, Colorado",
-  "Almont, Colorado",
-  "Paonia, Colorado",
-  "Hotchkiss, Colorado",
-];
+const needs = NEEDS.map((n) => ({ icon: n.icon, label: n.label as string, detail: n.detail }));
 
 const realStops = [
   {
@@ -215,6 +196,7 @@ type NearbyPlace = {
   lng: number;
   icon: string;
   helpsWith: string[];
+  subChips?: string[];
   description?: string;
   note?: string;
   website?: string;
@@ -455,7 +437,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [origin, selectedNeeds, refinements, radiusMiles]);
+  }, [origin, selectedNeeds, refinements, radiusMiles, radiusMeters]);
 
   useEffect(() => {
     const q = placeSearch.trim();
@@ -574,8 +556,11 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [reportName, origin, nameLocked, nameFocused]);
 
-  function matchingNeeds(placeNeeds: string[]) {
-    return selectedNeeds.filter((need) => placeNeeds.includes(need));
+  // One filter for list, cards and pins: OR across needs, sub-chips narrow a need.
+  const pickedSubs = pickedSubChips(selectedNeeds, refinements);
+
+  function matchingNeeds(placeNeeds: string[], placeSubs: string[] = []) {
+    return coverage({ helpsWith: placeNeeds, subChips: placeSubs }, selectedNeeds, pickedSubs);
   }
 
   function inRadius(stop: { lat: number; lng: number }) {
@@ -593,6 +578,7 @@ export default function Home() {
           : matchingNeeds(stop.helpsWith).length > 0,
       )
       .sort((a, b) => matchingNeeds(b.helpsWith).length - matchingNeeds(a.helpsWith).length);
+    // Gold stops carry no sub-chip data yet, so a picked sub-chip (e.g. Vet) hides them for that need.
   }
 
   function googleLeads() {
@@ -603,16 +589,15 @@ export default function Home() {
       .filter((place) => !realStops.some((stop) => isSamePlace(stop.name, place.name)))
       .filter((place) => inRadius(place))
       .filter((place) => {
-        if (selectedNeeds.length === 0 || !place.helpsWith?.length) return true;
-        return place.helpsWith.some((need) => selectedNeeds.includes(need));
+        // A place with no helpsWith never passes a chip filter.
+        if (selectedNeeds.length === 0) return true;
+        return matchingNeeds(place.helpsWith || [], place.subChips).length > 0;
       })
-      .sort((a, b) => {
-        const blob = (place: NearbyPlace) =>
-          `${place.name} ${place.description || ""} ${place.area}`.toLowerCase();
-        const score = (place: NearbyPlace) =>
-          refinements.filter((item) => blob(place).includes(item.toLowerCase())).length;
-        return score(b) - score(a);
-      })
+      .sort(
+        (a, b) =>
+          matchingNeeds(b.helpsWith || [], b.subChips).length -
+          matchingNeeds(a.helpsWith || [], a.subChips).length,
+      )
       .slice(0, 8);
   }
 
@@ -763,7 +748,7 @@ export default function Home() {
       setReportArea(data.place.area || hit.area);
       setTownLocked(true);
       setNameLocked(true);
-      useGoogleHours(data.place.hours, data.place.hoursFull);
+      applyGoogleHours(data.place.hours, data.place.hoursFull);
       if (data.place.lat && data.place.lng) {
         setPinLat(data.place.lat);
         setPinLng(data.place.lng);
@@ -809,17 +794,9 @@ export default function Home() {
     event?.preventDefault();
     const text = briefDraft.trim();
     if (!text) return;
-    const lower = text.toLowerCase();
-    const synonyms: Array<{ need: string; words: string[] }> = [
-      { need: "Adult-friendly", words: ["adult", "drink", "bar", "beer", "wine", "brewery", "winery", "cocktail", "liquor", "golf cart"] },
-      { need: "Adventure", words: ["adventure", "hike", "trail", "fish", "atv", "jeep", "raft", "hot spring"] },
-      { need: "Food", words: ["food", "eat", "dinner", "lunch", "breakfast", "hungry"] },
-      { need: "Fuel", words: ["fuel", "gas", "diesel"] },
-      { need: "Sleep", words: ["sleep", "camp", "stay", "overnight"] },
-      { need: "Shower", words: ["shower"] },
-      { need: "Dog Needs", words: ["dog", "pup"] },
-    ];
-    const found = synonyms.filter((row) => row.words.some((word) => lower.includes(word))).map((row) => row.need);
+    const heard = needsFromText(text);
+    const found: string[] = heard.needs;
+    for (const sub of heard.subChips) addRefinement(sub);
     if (found.length) {
       setSelectedNeeds((current) => [...new Set([...current, ...found])]);
     }
@@ -833,7 +810,7 @@ export default function Home() {
     setBriefDraft("");
   }
 
-  function useGoogleHours(hours?: string, hoursFull?: string) {
+  function applyGoogleHours(hours?: string, hoursFull?: string) {
     const full = (hoursFull || hours || "").trim();
     setGoogleHours(full);
     setHoursOk("");
@@ -857,7 +834,7 @@ export default function Home() {
     setBeenThere("yes");
     setPullThrough("unsure");
     setReportDogs("unsure");
-    useGoogleHours(prefill?.hours, prefill?.hoursFull);
+    applyGoogleHours(prefill?.hours, prefill?.hoursFull);
     setJustSaved(null);
     setFormError("");
     setGoogleWrong(false);
@@ -883,7 +860,7 @@ export default function Home() {
         .then((r) => r.json())
         .then((data) => {
           if (data.place?.hoursFull || data.place?.hours) {
-            useGoogleHours(data.place.hours, data.place.hoursFull);
+            applyGoogleHours(data.place.hours, data.place.hoursFull);
           }
         })
         .catch(() => {});
@@ -1099,6 +1076,7 @@ export default function Home() {
     lat: number;
     lng: number;
     helpsWith?: string[];
+    subChips?: string[];
     description?: string;
     note?: string;
     rating?: number;
@@ -1110,7 +1088,8 @@ export default function Home() {
     status?: "verified" | "google";
   }) {
     const status = place.status || "verified";
-    const matches = matchingNeeds(place.helpsWith || []);
+    const matches = matchingNeeds(place.helpsWith || [], place.subChips);
+    const combo = comboBadge(matches);
     const saved = savedPlaceIds.includes(place.id);
     const open = expandedId === place.id;
     return (
@@ -1157,6 +1136,11 @@ export default function Home() {
             </p>
           );
         })()}
+        {combo && (
+          <p className="mt-2 inline-block rounded-full bg-orange-100 px-3 py-1 text-xs font-black text-orange-800">
+            {combo}
+          </p>
+        )}
         {place.helpsWith && place.helpsWith.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {place.helpsWith.map((need) => (
@@ -1719,7 +1703,7 @@ export default function Home() {
             </section>
           )}
         </section>
-        <Nav />
+        {Nav()}
       </main>
     );
   }
@@ -1751,7 +1735,7 @@ export default function Home() {
             </div>
           )}
         </section>
-        <Nav />
+        {Nav()}
       </main>
     );
   }
@@ -1877,21 +1861,8 @@ export default function Home() {
             </div>
             {selectedNeeds.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {(
-                  [
-                    selectedNeeds.includes("Adult-friendly")
-                      ? ["Golf carts", "Brewery", "Winery", "Cocktails", "Patio"]
-                      : [],
-                    selectedNeeds.includes("Adventure")
-                      ? ["Hike", "Fish", "View", "Hot springs", "ATV"]
-                      : [],
-                    selectedNeeds.includes("Dog Needs")
-                      ? ["Dog park", "Vet", "Supplies", "Pet-friendly patio", "Off-leash"]
-                      : [],
-                    selectedNeeds.includes("Food") ? ["Groceries", "Sit-down", "Coffee"] : [],
-                  ] as string[][]
-                )
-                  .flat()
+                {selectedNeeds
+                  .flatMap((need) => NEED_BY_LABEL[need]?.subChips.map((sub) => sub.label) || [])
                   .map((detail) => {
                     const on = refinements.some((item) => item.toLowerCase() === detail.toLowerCase());
                     return (
@@ -2035,7 +2006,7 @@ export default function Home() {
           </section>
         )}
       </section>
-      <Nav />
+      {Nav()}
     </main>
   );
 }

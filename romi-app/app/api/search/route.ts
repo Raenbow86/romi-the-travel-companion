@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { classify, iconForNeed, type NeedLabel } from "@/lib/needs";
 
 type SearchPlace = {
   id: string;
@@ -9,24 +10,9 @@ type SearchPlace = {
   rating?: number;
   reviewCount?: number;
   icon: string;
+  helpsWith: NeedLabel[];
+  subChips: string[];
 };
-
-function iconFor(types: string[] = []): string {
-  if (types.includes("lodging") || types.includes("campground")) return "🛏️";
-  if (types.includes("restaurant") || types.includes("cafe") || types.includes("bakery")) return "🍎";
-  if (types.includes("gas_station")) return "⛽";
-  if (
-    types.some(
-      (t) =>
-        ["liquor_store", "bar", "night_club"].includes(t) ||
-        t.includes("wine") ||
-        t.includes("brew"),
-    )
-  )
-    return "🍷";
-  if (types.includes("park")) return "🏞️";
-  return "📍";
-}
 
 export async function GET(request: NextRequest) {
   const q = (request.nextUrl.searchParams.get("q") || "").trim();
@@ -70,16 +56,22 @@ export async function GET(request: NextRequest) {
     const places: SearchPlace[] = (data.results || [])
       .filter((r) => r.name && r.geometry?.location)
       .slice(0, 8)
-      .map((r) => ({
-        id: r.place_id || `search-${r.name}`,
-        name: r.name as string,
-        area: r.vicinity || r.formatted_address || "",
-        lat: r.geometry!.location!.lat,
-        lng: r.geometry!.location!.lng,
-        rating: r.rating,
-        reviewCount: r.user_ratings_total,
-        icon: iconFor(r.types),
-      }));
+      .map((r) => {
+        // Typed search results go through the same need rules as the chips.
+        const { helpsWith, subChips } = classify({ name: r.name, types: r.types });
+        return {
+          id: r.place_id || `search-${r.name}`,
+          name: r.name as string,
+          area: r.vicinity || r.formatted_address || "",
+          lat: r.geometry!.location!.lat,
+          lng: r.geometry!.location!.lng,
+          rating: r.rating,
+          reviewCount: r.user_ratings_total,
+          icon: iconForNeed(helpsWith[0]),
+          helpsWith,
+          subChips,
+        };
+      });
 
     return NextResponse.json({ places, source: "google", status: data.status || "OK" });
   } catch {

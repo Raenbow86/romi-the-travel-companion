@@ -1,3 +1,4 @@
+import { clipWords } from "@/app/romi/text";
 import { NextRequest, NextResponse } from "next/server";
 import { NEEDS, NEED_BY_LABEL, classify, iconForNeed, passesNeedFilter, pickedSubChips, type NeedLabel } from "@/lib/needs";
 
@@ -99,8 +100,8 @@ function todayHours(weekdayText?: string[], openNow?: boolean) {
 function compileBlurb(place: GoogleDetails) {
   const editorial = place.editorial_summary?.overview?.replace(/\s+/g, " ").trim();
   const review = place.reviews?.[0]?.text?.replace(/\s+/g, " ").trim() || "";
-  const firstThought = review.split(/(?<=[.!?])\s+/).slice(0, 2).join(" ").slice(0, 220);
-  if (editorial) return editorial.slice(0, 240);
+  const firstThought = clipWords(review.split(/(?<=[.!?])\s+/).slice(0, 2).join(" "), 220);
+  if (editorial) return clipWords(editorial, 240);
   if (firstThought) return firstThought;
   if (place.rating) {
     return `Google visitors rate this ${place.rating}★` +
@@ -230,7 +231,8 @@ async function fromGoogle(
       const primaryNeed = selected.find((need) => helpsWith.includes(need as NeedLabel)) || helpsWith[0];
       const hoursToday = todayHours(place.opening_hours?.weekday_text, place.opening_hours?.open_now);
       const hoursFull = (place.opening_hours?.weekday_text || []).join("\n");
-      const review = place.reviews?.[0]?.text?.replace(/\s+/g, " ").slice(0, 280);
+      const reviewText = place.reviews?.[0]?.text;
+      const review = reviewText ? clipWords(reviewText, 280) : undefined;
 
       return {
         id: place.placeId,

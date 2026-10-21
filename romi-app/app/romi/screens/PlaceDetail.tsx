@@ -5,6 +5,7 @@ import type { CardPlace } from "../data";
 import { useRomi } from "../RomiContext";
 import { Eyebrow, GOOGLE_EDGE, Shell, StatusBadge, VERIFIED_EDGE, card, field, primaryBtn, secondaryBtn } from "../ui";
 import { ratingLine, statusLabel } from "./PlaceCard";
+import { duplicatesReview } from "../text";
 
 export function PlaceDetail({ place }: { place: CardPlace }) {
   const r = useRomi();
@@ -15,6 +16,8 @@ export function PlaceDetail({ place }: { place: CardPlace }) {
   const romi = r.travelerScore(place.id, place.name);
   const ask = r.latestAsk(place.id);
   const reviews = r.reviewsFor(place.id, place.name);
+  // Google leads: the blurb often falls back to the first review, which is quoted in full below.
+  const about = duplicatesReview(place.description, place.reviewSnippet) ? "" : place.description;
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
 
   return (
@@ -91,10 +94,10 @@ export function PlaceDetail({ place }: { place: CardPlace }) {
         )}
       </div>
 
-      {place.description || (status === "verified" && place.note) ? (
+      {about || (status === "verified" && place.note) ? (
         <section className={`${card} mt-4`}>
           <Eyebrow>{status === "verified" ? "SCOUT NOTE" : "ABOUT"}</Eyebrow>
-          {place.description ? <p className="mt-2 text-[15px] leading-6 text-slate-700">{place.description}</p> : null}
+          {about ? <p className="mt-2 text-[15px] leading-6 text-slate-700">{about}</p> : null}
           {status === "verified" && place.note ? (
             <p className="mt-2 text-[15px] font-semibold leading-6 text-slate-800">🧭 {place.note}</p>
           ) : null}

@@ -32,7 +32,7 @@ export function PlaceDetail({ place }: { place: CardPlace }) {
         ‹ Results
       </button>
 
-      <section className={`${card} mt-1 border-l-[5px] p-5 ${status === "verified" ? VERIFIED_EDGE : GOOGLE_EDGE}`}>
+      <section className={`${card} mt-1 p-5 ${status === "verified" ? VERIFIED_EDGE : GOOGLE_EDGE}`}>
         <div className="flex items-start justify-between gap-3">
           <StatusBadge status={status} label={statusLabel(status, ask?.status)} />
           <span className="text-4xl">{place.icon}</span>

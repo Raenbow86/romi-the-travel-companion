@@ -5,8 +5,12 @@ import { useRomi } from "./RomiContext";
 import type { Screen } from "./data";
 
 // Brand rule: teal = scout-verified, orange = Google lead. Nothing else uses them.
-export const VERIFIED_EDGE = "border-l-teal-600";
-export const GOOGLE_EDGE = "border-l-orange-600";
+// Sun-readable shades: teal-700 (#0f766e) and orange-700 (#c2410c). Map pins use the same hex values.
+export const VERIFIED_HEX = "#0f766e";
+export const GOOGLE_HEX = "#c2410c";
+/** Verified: thick teal edge + soft teal tint. Google: thin orange edge on plain white. */
+export const VERIFIED_EDGE = "border-l-[6px] border-l-teal-700 bg-teal-50!";
+export const GOOGLE_EDGE = "border-l-[3px] border-l-orange-700 bg-white";
 
 export const card = "rounded-[22px] bg-white p-4 shadow-[0_6px_20px_-8px_rgba(15,23,42,0.18)]";
 export const field =
@@ -32,7 +36,9 @@ export function StatusBadge({ status, label }: { status: "verified" | "google"; 
   return (
     <span
       className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-extrabold tracking-[0.08em] ${
-        status === "verified" ? "bg-teal-100 text-teal-800" : "bg-orange-100 text-orange-800"
+        status === "verified"
+          ? "bg-teal-700 text-white"
+          : "bg-white py-[3px] text-orange-800 ring-[1.5px] ring-inset ring-orange-700"
       }`}
     >
       {status === "verified" ? "✓ " : ""}

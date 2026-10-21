@@ -73,7 +73,7 @@ export function RomiMap({
       }).addTo(map);
 
       const points = stops.map((stop) => {
-        const color = stop.kind === "google" ? "#ea580c" : "#0f766e";
+        const color = stop.kind === "google" ? "#c2410c" : "#0f766e";
         const marker = L.circleMarker([stop.lat, stop.lng], {
           radius: 9,
           color: "#ffffff",

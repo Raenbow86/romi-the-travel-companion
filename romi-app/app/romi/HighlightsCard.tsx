@@ -24,7 +24,7 @@ export function HighlightsCard({
   if (!chips.length && !quote && !extra.length) return null;
   return (
     <section
-      className={`${card} mt-4 border-l-[3px] ${tone === "verified" ? "border-l-teal-600" : "border-l-orange-600"}`}
+      className={`${card} mt-4 border-l-[3px] ${tone === "verified" ? "border-l-teal-700" : "border-l-orange-700"}`}
       data-testid="highlights"
       data-tone={tone}
     >

@@ -43,7 +43,7 @@ export function PlaceCard({ place }: { place: CardPlace }) {
         r.setReviewThanks("");
         window.scrollTo({ top: 0 });
       }}
-      className={`${card} block w-full border-l-[5px] text-left ${status === "verified" ? VERIFIED_EDGE : GOOGLE_EDGE} ${
+      className={`${card} block w-full text-left ${status === "verified" ? VERIFIED_EDGE : GOOGLE_EDGE} ${
         r.highlightedId === place.id ? "ring-2 ring-slate-800" : ""
       }`}
     >

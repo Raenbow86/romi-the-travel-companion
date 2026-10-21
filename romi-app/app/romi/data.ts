@@ -201,6 +201,8 @@ export type NearbyPlace = {
   rating?: number;
   reviewCount?: number;
   reviewSnippet?: string;
+  quote?: string;
+  highlights?: string[];
   source?: string;
 };
 
@@ -284,6 +286,8 @@ export type CardPlace = {
   rating?: number;
   reviewCount?: number;
   reviewSnippet?: string;
+  quote?: string;
+  highlights?: string[];
   website?: string;
   hours?: string;
   hoursFull?: string;

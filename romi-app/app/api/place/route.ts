@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clipWords } from "@/app/romi/text";
+import { extractHighlights, pickQuote } from "@/app/romi/highlights";
 
 export async function GET(request: NextRequest) {
   const key = process.env.GOOGLE_PLACES_API_KEY;
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
         user_ratings_total?: number;
         types?: string[];
         opening_hours?: { weekday_text?: string[]; open_now?: boolean };
-        reviews?: Array<{ text?: string }>;
+        reviews?: Array<{ text?: string; rating?: number }>;
       };
     };
     const r = data.result;
@@ -33,6 +35,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "not-found" }, { status: 200 });
     }
     const week = r.opening_hours?.weekday_text || [];
+    const reviews = r.reviews || [];
+    const picked = pickQuote(reviews);
     return NextResponse.json({
       place: {
         id,
@@ -45,6 +49,9 @@ export async function GET(request: NextRequest) {
         reviewCount: r.user_ratings_total,
         hours: week.slice(0, 2).join(" · "),
         hoursFull: week.join("\n"),
+        reviewSnippet: picked ? clipWords(picked.full, 280) : undefined,
+        quote: picked?.quote,
+        highlights: extractHighlights(reviews.map((x) => x.text || ""), 5),
         icon: "📍",
         helpsWith: [],
         source: "google",

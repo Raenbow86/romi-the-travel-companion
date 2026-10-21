@@ -1,4 +1,5 @@
 import { clipWords } from "@/app/romi/text";
+import { extractHighlights, pickQuote } from "@/app/romi/highlights";
 import { NextRequest, NextResponse } from "next/server";
 import { NEEDS, NEED_BY_LABEL, classify, iconForNeed, passesNeedFilter, pickedSubChips, type NeedLabel } from "@/lib/needs";
 
@@ -231,8 +232,11 @@ async function fromGoogle(
       const primaryNeed = selected.find((need) => helpsWith.includes(need as NeedLabel)) || helpsWith[0];
       const hoursToday = todayHours(place.opening_hours?.weekday_text, place.opening_hours?.open_now);
       const hoursFull = (place.opening_hours?.weekday_text || []).join("\n");
-      const reviewText = place.reviews?.[0]?.text;
-      const review = reviewText ? clipWords(reviewText, 280) : undefined;
+      // Use every review Google already returned (up to 5) — no extra API calls.
+      const reviews = place.reviews || [];
+      const picked = pickQuote(reviews);
+      const review = picked ? clipWords(picked.full, 280) : undefined;
+      const highlights = extractHighlights(reviews.map((r) => r.text || ""), 5);
 
       return {
         id: place.placeId,
@@ -251,6 +255,8 @@ async function fromGoogle(
         rating: place.rating,
         reviewCount: place.user_ratings_total,
         reviewSnippet: review,
+        quote: picked?.quote,
+        highlights,
         source: "google" as const,
       };
     });
@@ -267,7 +273,7 @@ type GoogleDetails = {
   rating?: number;
   user_ratings_total?: number;
   editorial_summary?: { overview?: string };
-  reviews?: Array<{ text?: string }>;
+  reviews?: Array<{ text?: string; rating?: number }>;
   types?: string[];
 };
 

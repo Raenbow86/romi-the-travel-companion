@@ -5,7 +5,9 @@ import type { CardPlace } from "../data";
 import { useRomi } from "../RomiContext";
 import { Eyebrow, GOOGLE_EDGE, Shell, StatusBadge, VERIFIED_EDGE, card, field, primaryBtn, secondaryBtn } from "../ui";
 import { ratingLine, statusLabel } from "./PlaceCard";
-import { duplicatesReview } from "../text";
+import { clipWords, duplicatesReview } from "../text";
+import { scoutHighlights } from "../highlights";
+import { HighlightsCard, HoursCard } from "../HighlightsCard";
 
 export function PlaceDetail({ place }: { place: CardPlace }) {
   const r = useRomi();
@@ -94,31 +96,39 @@ export function PlaceDetail({ place }: { place: CardPlace }) {
         )}
       </div>
 
-      {about || (status === "verified" && place.note) ? (
-        <section className={`${card} mt-4`}>
-          <Eyebrow>{status === "verified" ? "SCOUT NOTE" : "ABOUT"}</Eyebrow>
-          {about ? <p className="mt-2 text-[15px] leading-6 text-slate-700">{about}</p> : null}
-          {status === "verified" && place.note ? (
-            <p className="mt-2 text-[15px] font-semibold leading-6 text-slate-800">🧭 {place.note}</p>
-          ) : null}
-        </section>
-      ) : null}
+      {status === "verified" ? (
+        <HighlightsCard
+          title="SCOUT HIGHLIGHTS"
+          chips={scoutHighlights(place)}
+          quote={place.description ? clipWords(place.description, 120) : undefined}
+          more={[
+            { text: place.description || "" },
+            { text: place.note ? `🧭 ${place.note}` : "", strong: true },
+          ]}
+        />
+      ) : (
+        <HighlightsCard
+          title="HIGHLIGHTS FROM REVIEWS"
+          chips={place.highlights || []}
+          quote={place.quote || (place.reviewSnippet ? clipWords(place.reviewSnippet, 120) : about ? clipWords(about, 120) : undefined)}
+          more={[
+            { text: place.reviewSnippet ? `“${place.reviewSnippet}”` : "" },
+            { text: about && about !== place.quote ? about : "" },
+          ]}
+        />
+      )}
 
-      {place.reviewSnippet || place.hoursFull || place.website ? (
-        <section className={`${card} mt-4 space-y-3`}>
-          {place.reviewSnippet ? <p className="text-[15px] leading-6 text-slate-700">“{place.reviewSnippet}”</p> : null}
-          {place.hoursFull ? (
-            <div>
-              <Eyebrow>HOURS</Eyebrow>
-              <p className="mt-1 whitespace-pre-line text-sm text-slate-600">{place.hoursFull}</p>
-            </div>
-          ) : null}
-          {place.website ? (
-            <a href={place.website} target="_blank" rel="noreferrer" className="block text-sm font-bold text-slate-800 underline">
-              Website →
-            </a>
-          ) : null}
-        </section>
+      <HoursCard hours={place.hours} hoursFull={place.hoursFull} />
+
+      {place.website ? (
+        <a
+          href={place.website}
+          target="_blank"
+          rel="noreferrer"
+          className={`${card} mt-4 block py-4 text-sm font-bold text-slate-800 underline`}
+        >
+          Website ↗
+        </a>
       ) : null}
 
       {status === "verified" ? (

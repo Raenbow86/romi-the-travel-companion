@@ -56,19 +56,6 @@ export const realStops = [
     note: "530 Grand Ave, Paonia. Typically 7am–1pm. Grab bread to go for later stops. Bring a backup payment.",
   },
   {
-    id: "town-of-paonia",
-    lat: 38.8683,
-    lng: -107.5919,
-    icon: "🏘️",
-    name: "Paonia",
-    area: "Paonia, Colorado",
-    region: "paonia",
-    description:
-      "Walk Grand Avenue and use town as the morning and evening hub. The living room of this wine-country stretch, not just a pin.",
-    helpsWith: ["Food", "Wi‑Fi & Cell"],
-    note: "Park once and walk. Peak late spring through harvest.",
-  },
-  {
     id: "orchard-valley-farms",
     lat: 38.8568,
     lng: -107.5985,

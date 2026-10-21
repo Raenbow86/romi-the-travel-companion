@@ -98,6 +98,7 @@ export function PlaceDetail({ place }: { place: CardPlace }) {
 
       {status === "verified" ? (
         <HighlightsCard
+          tone="verified"
           title="SCOUT HIGHLIGHTS"
           chips={scoutHighlights(place)}
           quote={place.description ? clipWords(place.description, 120) : undefined}
@@ -108,7 +109,8 @@ export function PlaceDetail({ place }: { place: CardPlace }) {
         />
       ) : (
         <HighlightsCard
-          title="HIGHLIGHTS FROM REVIEWS"
+          tone="google"
+          title="GOOGLE REVIEW HIGHLIGHTS"
           chips={place.highlights || []}
           quote={place.quote || (place.reviewSnippet ? clipWords(place.reviewSnippet, 120) : about ? clipWords(about, 120) : undefined)}
           more={[

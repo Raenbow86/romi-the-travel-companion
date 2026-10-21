@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { highlightIcon } from "./highlights";
-import { Eyebrow, card } from "./ui";
+import { card } from "./ui";
 
 /** One highlight card for BOTH scout-verified places and Google leads: neutral chips + short quote + Read more. */
 export function HighlightsCard({
+  tone,
   title,
   chips,
   quote,
   more,
 }: {
+  /** Source of the highlights: accent follows the brand rule (teal = scout, orange = Google). Chips stay neutral. */
+  tone: "verified" | "google";
   title: string;
   chips: string[];
   quote?: string;
@@ -20,10 +23,20 @@ export function HighlightsCard({
   const extra = (more || []).filter((m) => m.text && m.text !== quote);
   if (!chips.length && !quote && !extra.length) return null;
   return (
-    <section className={`${card} mt-4`} data-testid="highlights">
+    <section
+      className={`${card} mt-4 border-l-[3px] ${tone === "verified" ? "border-l-teal-600" : "border-l-orange-600"}`}
+      data-testid="highlights"
+      data-tone={tone}
+    >
+      <p
+        className={`text-[11px] font-extrabold tracking-[0.16em] ${
+          tone === "verified" ? "text-teal-700" : "text-orange-700"
+        }`}
+      >
+        {title}
+      </p>
       {chips.length > 0 ? (
         <>
-          <Eyebrow>{title}</Eyebrow>
           <div className="mt-3 flex flex-wrap gap-2">
             {chips.map((c) => (
               <span
@@ -37,7 +50,7 @@ export function HighlightsCard({
         </>
       ) : null}
       {quote ? (
-        <p className={`${chips.length ? "mt-3" : ""} border-l-[3px] border-slate-200 pl-3 text-[15px] leading-6 text-slate-700`}>
+        <p className={`mt-3 border-l-[3px] border-slate-200 pl-3 text-[15px] leading-6 text-slate-700`}>
           “{quote}”
         </p>
       ) : null}
